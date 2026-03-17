@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+*.pyc
+typea_left_box_edges_preview.png
+users.local.json
