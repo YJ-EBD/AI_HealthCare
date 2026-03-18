@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import math
+import signal
 import sys
 import time
 import urllib.request
@@ -25,7 +26,7 @@ except ImportError:  # pragma: no cover - depends on local environment
 try:
     from PyQt5.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, Qt, QRect, QTimer
     from PyQt5.QtGui import QFont, QImage, QPainter, QPen, QPixmap
-    from PyQt5.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QPushButton, QStyle, QStyleOptionButton
+    from PyQt5.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QPushButton, QStyle, QStyleOptionButton, QWidget
 except ImportError:  # pragma: no cover - depends on local environment
     QApplication = None
     QCheckBox = None
@@ -38,6 +39,7 @@ except ImportError:  # pragma: no cover - depends on local environment
     QPen = None
     QStyle = None
     QStyleOptionButton = None
+    QWidget = None
     QEasingCurve = None
     QParallelAnimationGroup = None
     QPropertyAnimation = None
@@ -75,12 +77,17 @@ COMMON_CAPTURE_MODES = (
     (640, 480),
 )
 UI_DIR = Path(__file__).resolve().parent / "UI"
+MAIN_LAYOUT_PATH = UI_DIR / "Main.png"
 QNA_LAYOUT_PATH = UI_DIR / "QnA.png"
 TYPEA_LAYOUT_PATH = UI_DIR / "TypeA.png"
 # Approximate search box for the inner rounded camera area in UI/TypeA.png.
 BODY_CAMERA_RECT = (102, 141, 485, 818)
 FACE_A_CAMERA_RECT = (676, 139, 549, 325)
 FACE_B_CAMERA_RECT = (1296, 139, 549, 325)
+MAIN_LOGO_PADDING_X_RATIO = 0.014
+MAIN_LOGO_PADDING_Y_RATIO = 0.02
+MAIN_LOGO_FALLBACK_WIDTH_RATIO = 0.18
+MAIN_LOGO_FALLBACK_HEIGHT_RATIO = 0.12
 BODY_CAMERA_MARGIN = 0
 BODY_CAMERA_RADIUS = 23
 FACE_CAMERA_RADIUS = 26
@@ -95,6 +102,16 @@ SURVEY_TITLE_FONT_SIZE = 24
 SURVEY_OPTION_FONT_SIZE = 18
 SURVEY_TEXT_RENDER_SCALE = 4
 TONGUE_PREVIEW_HOLD_FRAMES = 8
+SURVEY_TEXT_COLOR: Color = (248, 251, 255)
+OVERLAY_TEXT_PRIMARY: Color = (246, 249, 255)
+OVERLAY_TEXT_SECONDARY: Color = (220, 228, 240)
+OVERLAY_TEXT_GUIDE_READY: Color = (240, 248, 242)
+OVERLAY_TEXT_GUIDE_WAIT: Color = (236, 242, 250)
+OVERLAY_TEXT_METRIC_COLORS: Dict[str, Color] = {
+    "good": (243, 250, 245),
+    "warn": (255, 248, 242),
+    "bad": (255, 242, 242),
+}
 
 
 @dataclass(frozen=True)
@@ -518,6 +535,47 @@ def compute_survey_button_rect(background: np.ndarray) -> Tuple[int, int, int, i
     return button_x, button_y, button_width, button_height
 
 
+def compute_main_logo_rect(background: np.ndarray) -> Tuple[int, int, int, int]:
+    canvas_height, canvas_width = background.shape[:2]
+    gray = cv2.cvtColor(background, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (0, 0), 9)
+    detail = cv2.absdiff(gray, blurred)
+    _, detail_mask = cv2.threshold(detail, 14, 255, cv2.THRESH_BINARY)
+
+    component_count, _, stats, _ = cv2.connectedComponentsWithStats(detail_mask)
+    min_area = max(250, int(canvas_width * canvas_height * 0.00005))
+    best_rect: Optional[Tuple[int, int, int, int]] = None
+    best_score = -1.0
+
+    for component_index in range(1, component_count):
+        x, y, width, height, area = stats[component_index]
+        if area < min_area:
+            continue
+        if x < int(canvas_width * 0.55) or y < int(canvas_height * 0.55):
+            continue
+
+        score = float(area) + (x * 0.4) + (y * 0.4)
+        if score > best_score:
+            best_score = score
+            best_rect = (int(x), int(y), int(width), int(height))
+
+    if best_rect is None:
+        fallback_width = max(240, int(canvas_width * MAIN_LOGO_FALLBACK_WIDTH_RATIO))
+        fallback_height = max(96, int(canvas_height * MAIN_LOGO_FALLBACK_HEIGHT_RATIO))
+        fallback_x = canvas_width - fallback_width - max(36, int(canvas_width * 0.03))
+        fallback_y = canvas_height - fallback_height - max(28, int(canvas_height * 0.03))
+        return fallback_x, fallback_y, fallback_width, fallback_height
+
+    x, y, width, height = best_rect
+    padding_x = max(18, int(canvas_width * MAIN_LOGO_PADDING_X_RATIO))
+    padding_y = max(14, int(canvas_height * MAIN_LOGO_PADDING_Y_RATIO))
+    left = max(0, x - padding_x)
+    top = max(0, y - padding_y)
+    right = min(canvas_width, x + width + padding_x)
+    bottom = min(canvas_height, y + height + padding_y)
+    return left, top, max(1, right - left), max(1, bottom - top)
+
+
 def build_survey_section_specs() -> Tuple[SurveySectionSpec, ...]:
     title_x_positions = (225, 1085)
     option_x_positions = (268, 1128)
@@ -583,7 +641,7 @@ if QDialog is not None:
             painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
             pen = QPen()
-            pen.setColor(Qt.black)
+            pen.setColor(Qt.white)
             pen.setWidth(2)
             pen.setCapStyle(Qt.RoundCap)
             pen.setJoinStyle(Qt.RoundJoin)
@@ -607,24 +665,31 @@ if QDialog is not None:
     class SurveyDialog(QDialog):
         def __init__(
             self,
-            background_path: Path,
-            button_rect: Tuple[int, int, int, int],
+            main_background_path: Path,
+            main_logo_rect: Tuple[int, int, int, int],
+            survey_background_path: Path,
+            survey_button_rect: Tuple[int, int, int, int],
             analysis_layout: np.ndarray,
             args: argparse.Namespace,
             initial_states: Optional[list[bool]] = None,
         ) -> None:
             super().__init__()
             self._base_size = (1920, 1080)
-            self._background_pixmap = QPixmap(str(background_path))
-            self._button_rect = button_rect
+            self._main_background_pixmap = QPixmap(str(main_background_path))
+            self._survey_background_pixmap = QPixmap(str(survey_background_path))
+            self._main_logo_rect = main_logo_rect
+            self._survey_button_rect = survey_button_rect
             self._analysis_layout = analysis_layout
             self._args = args
             self._option_states = list(initial_states or ([False] * SURVEY_OPTION_COUNT))
             self._titles: list[Tuple[QLabel, Tuple[int, int, int, int]]] = []
             self._checkboxes: list[Tuple[QCheckBox, Tuple[int, int, int, int]]] = []
             self._transition_group = None
-            self._transition_overlays: list[QLabel] = []
-            self._current_page = "survey"
+            self._transition_from_page: Optional[QWidget] = None
+            self._transition_to_page: Optional[QWidget] = None
+            self._transition_target: Optional[str] = None
+            self._after_transition = None
+            self._current_page = "main"
             self._analysis_frame: Optional[np.ndarray] = None
             self._summary_text: Optional[str] = None
             self._backend = None
@@ -658,19 +723,51 @@ if QDialog is not None:
             self.setObjectName("SurveyDialog")
             self.setStyleSheet("#SurveyDialog { background-color: #f7f7f7; }")
 
-            self._background_label = QLabel(self)
-            self._background_label.setScaledContents(True)
-            self._background_label.lower()
+            self._main_page = QWidget(self)
+            self._survey_page = QWidget(self)
+            self._analysis_page = QWidget(self)
+            self._pages = {
+                "main": self._main_page,
+                "survey": self._survey_page,
+                "analysis": self._analysis_page,
+            }
 
-            self._analysis_label = QLabel(self)
+            self._main_background_label = QLabel(self._main_page)
+            self._main_background_label.setScaledContents(True)
+            self._main_background_label.lower()
+
+            self._main_logo_button = QPushButton("", self._main_page)
+            self._main_logo_button.clicked.connect(self._start_intro_transition)
+            self._main_logo_button.setCursor(Qt.PointingHandCursor)
+            self._main_logo_button.setStyleSheet(
+                """
+                QPushButton {
+                    background: transparent;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 0.05);
+                    border-radius: 28px;
+                }
+                QPushButton:pressed {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    border-radius: 28px;
+                }
+                """
+            )
+
+            self._survey_background_label = QLabel(self._survey_page)
+            self._survey_background_label.setScaledContents(True)
+            self._survey_background_label.lower()
+
+            self._analysis_label = QLabel(self._analysis_page)
             self._analysis_label.setScaledContents(True)
-            self._analysis_label.hide()
             self._analysis_label.lower()
 
             for section in SURVEY_SECTION_SPECS:
-                title_label = QLabel(section.title, self)
+                title_label = QLabel(section.title, self._survey_page)
                 title_label.setAlignment(Qt.AlignCenter)
-                title_label.setStyleSheet("background: transparent; color: #000000;")
+                title_label.setStyleSheet("background: transparent; color: #f8fbff;")
                 self._titles.append((title_label, section.title_rect))
 
                 for option_text, option_rect, checkbox_rect in zip(
@@ -686,12 +783,12 @@ if QDialog is not None:
                         (option_rect[0] + option_rect[2]) - checkbox_rect[0],
                         option_rect[3],
                     )
-                    checkbox = TransparentSurveyCheckBox(option_text, self)
+                    checkbox = TransparentSurveyCheckBox(option_text, self._survey_page)
                     checkbox.setStyleSheet(
                         """
                         QCheckBox {
                             background: transparent;
-                            color: #000000;
+                            color: #f8fbff;
                             spacing: 23px;
                             padding: 0px;
                         }
@@ -715,25 +812,27 @@ if QDialog is not None:
                     )
                     self._checkboxes.append((checkbox, checkbox_row_rect))
 
-            self._complete_button = QPushButton(SURVEY_BUTTON_TEXT, self)
-            self._complete_button.clicked.connect(self._start_transition)
+            self._complete_button = QPushButton(SURVEY_BUTTON_TEXT, self._survey_page)
+            self._complete_button.clicked.connect(self._start_survey_transition)
             self._complete_button.setStyleSheet(
                 """
                 QPushButton {
-                    background-color: rgba(191, 210, 244, 0.96);
-                    color: #2b3550;
-                    border: 2px solid rgba(125, 146, 193, 0.95);
+                    background-color: rgba(116, 139, 193, 0.97);
+                    color: #f8fbff;
+                    border: 2px solid rgba(183, 202, 238, 0.96);
                     border-radius: 26px;
                     padding: 2px 10px;
                 }
                 QPushButton:hover {
-                    background-color: rgba(205, 220, 248, 0.98);
+                    background-color: rgba(129, 152, 207, 0.98);
                 }
                 QPushButton:pressed {
-                    background-color: rgba(177, 199, 238, 0.98);
+                    background-color: rgba(103, 126, 181, 0.98);
                 }
                 """
             )
+
+            self._show_only_page("main")
 
         def option_states(self) -> list[bool]:
             return [checkbox.isChecked() for checkbox, _ in self._checkboxes]
@@ -741,19 +840,14 @@ if QDialog is not None:
         def final_summary(self) -> Optional[str]:
             return self._summary_text
 
-        def _cleanup_transition_overlays(self) -> None:
-            for overlay in self._transition_overlays:
-                overlay.hide()
-                overlay.deleteLater()
-            self._transition_overlays = []
-
-        def _hide_survey_widgets(self) -> None:
-            self._background_label.hide()
-            for label, _ in self._titles:
-                label.hide()
-            for checkbox, _ in self._checkboxes:
-                checkbox.hide()
-            self._complete_button.hide()
+        def _show_only_page(self, page_name: str) -> None:
+            for name, page in self._pages.items():
+                page.setGeometry(self.rect())
+                if name == page_name:
+                    page.show()
+                    page.raise_()
+                else:
+                    page.hide()
 
         def _set_analysis_frame(self, frame: np.ndarray) -> None:
             self._analysis_frame = frame.copy()
@@ -763,20 +857,33 @@ if QDialog is not None:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             height, width = rgb_frame.shape[:2]
             qimage = QImage(rgb_frame.data, width, height, rgb_frame.strides[0], QImage.Format_RGB888)
+            target_size = self._analysis_label.size()
+            if target_size.width() <= 0 or target_size.height() <= 0:
+                target_size = self.size()
             pixmap = QPixmap.fromImage(qimage.copy())
             self._analysis_label.setPixmap(
                 pixmap.scaled(
-                    self.size(),
+                    target_size,
                     Qt.IgnoreAspectRatio,
                     Qt.SmoothTransformation,
                 )
             )
 
-        def _start_transition(self) -> None:
+        def _start_intro_transition(self) -> None:
+            self._start_slide_transition("survey")
+
+        def _start_survey_transition(self) -> None:
             self._option_states = self.option_states()
-            self._analysis_label.show()
-            self._analysis_label.lower()
             self._set_analysis_frame(self._loading_frame)
+            self._start_slide_transition("analysis", after_transition=self._start_analysis)
+
+        def _start_slide_transition(self, next_page_name: str, after_transition=None) -> None:
+            if self._transition_group is not None or next_page_name == self._current_page:
+                return
+
+            current_page = self._pages[self._current_page]
+            next_page = self._pages[next_page_name]
+            self._after_transition = after_transition
 
             if (
                 QParallelAnimationGroup is None
@@ -784,57 +891,65 @@ if QDialog is not None:
                 or QRect is None
                 or QEasingCurve is None
             ):
-                self._finish_transition()
-                return
-
-            current_snapshot = self.grab()
-            if current_snapshot.isNull():
-                self._finish_transition()
+                self._current_page = next_page_name
+                self._show_only_page(next_page_name)
+                if self._after_transition is not None:
+                    callback = self._after_transition
+                    self._after_transition = None
+                    QTimer.singleShot(0, callback)
                 return
 
             width = self.width()
             height = self.height()
 
-            current_overlay = QLabel(self)
-            current_overlay.setPixmap(current_snapshot)
-            current_overlay.setGeometry(0, 0, width, height)
-            current_overlay.show()
-            current_overlay.raise_()
+            current_page.setGeometry(0, 0, width, height)
+            next_page.setGeometry(width, 0, width, height)
+            next_page.show()
+            next_page.raise_()
 
-            next_overlay = QLabel(self)
-            if self._analysis_label.pixmap() is not None:
-                next_overlay.setPixmap(self._analysis_label.pixmap())
-            next_overlay.setGeometry(width, 0, width, height)
-            next_overlay.show()
-            next_overlay.raise_()
-
-            self._transition_overlays = [current_overlay, next_overlay]
-
-            current_animation = QPropertyAnimation(current_overlay, b"geometry", self)
+            current_animation = QPropertyAnimation(current_page, b"geometry", self)
             current_animation.setDuration(340)
             current_animation.setStartValue(QRect(0, 0, width, height))
             current_animation.setEndValue(QRect(-width, 0, width, height))
             current_animation.setEasingCurve(QEasingCurve.OutCubic)
 
-            next_animation = QPropertyAnimation(next_overlay, b"geometry", self)
+            next_animation = QPropertyAnimation(next_page, b"geometry", self)
             next_animation.setDuration(340)
             next_animation.setStartValue(QRect(width, 0, width, height))
             next_animation.setEndValue(QRect(0, 0, width, height))
             next_animation.setEasingCurve(QEasingCurve.OutCubic)
 
+            self._transition_from_page = current_page
+            self._transition_to_page = next_page
+            self._transition_target = next_page_name
             self._transition_group = QParallelAnimationGroup(self)
             self._transition_group.addAnimation(current_animation)
             self._transition_group.addAnimation(next_animation)
-            self._transition_group.finished.connect(self._finish_transition)
+            self._transition_group.finished.connect(self._finish_slide_transition)
             self._transition_group.start()
 
-        def _finish_transition(self) -> None:
-            self._current_page = "analysis"
-            self._hide_survey_widgets()
-            self._analysis_label.show()
-            self._analysis_label.raise_()
-            self._cleanup_transition_overlays()
-            QTimer.singleShot(0, self._start_analysis)
+        def _finish_slide_transition(self) -> None:
+            if self._transition_from_page is not None:
+                self._transition_from_page.hide()
+                self._transition_from_page.setGeometry(self.rect())
+
+            if self._transition_to_page is not None:
+                self._transition_to_page.setGeometry(self.rect())
+                self._transition_to_page.show()
+                self._transition_to_page.raise_()
+
+            if self._transition_target is not None:
+                self._current_page = self._transition_target
+
+            callback = self._after_transition
+            self._after_transition = None
+            self._transition_group = None
+            self._transition_from_page = None
+            self._transition_to_page = None
+            self._transition_target = None
+
+            if callback is not None:
+                QTimer.singleShot(0, callback)
 
         def _start_analysis(self) -> None:
             try:
@@ -952,17 +1067,34 @@ if QDialog is not None:
             )
 
         def _apply_layout(self) -> None:
-            self._background_label.setGeometry(self.rect())
-            if not self._background_pixmap.isNull():
-                self._background_label.setPixmap(
-                    self._background_pixmap.scaled(
-                        self.size(),
+            if self._transition_group is None:
+                for page in self._pages.values():
+                    page.setGeometry(self.rect())
+
+            self._main_background_label.setGeometry(self._main_page.rect())
+            if not self._main_background_pixmap.isNull():
+                self._main_background_label.setPixmap(
+                    self._main_background_pixmap.scaled(
+                        self._main_page.size(),
                         Qt.IgnoreAspectRatio,
                         Qt.SmoothTransformation,
                     )
                 )
 
-            self._analysis_label.setGeometry(self.rect())
+            self._survey_background_label.setGeometry(self._survey_page.rect())
+            if not self._survey_background_pixmap.isNull():
+                self._survey_background_label.setPixmap(
+                    self._survey_background_pixmap.scaled(
+                        self._survey_page.size(),
+                        Qt.IgnoreAspectRatio,
+                        Qt.SmoothTransformation,
+                    )
+                )
+
+            main_logo_x, main_logo_y, main_logo_width, main_logo_height = self._scale_rect(self._main_logo_rect)
+            self._main_logo_button.setGeometry(main_logo_x, main_logo_y, main_logo_width, main_logo_height)
+
+            self._analysis_label.setGeometry(self._analysis_page.rect())
             if self._analysis_frame is not None:
                 self._set_analysis_frame(self._analysis_frame)
 
@@ -988,7 +1120,7 @@ if QDialog is not None:
                 checkbox.setFont(option_font)
                 checkbox.setChecked(self._option_states[index])
 
-            button_x, button_y, button_width, button_height = self._scale_rect(self._button_rect)
+            button_x, button_y, button_width, button_height = self._scale_rect(self._survey_button_rect)
             self._complete_button.setGeometry(button_x, button_y, button_width, button_height)
             self._complete_button.setFont(button_font)
 
@@ -1024,6 +1156,9 @@ if QDialog is not None:
             if event.key() == Qt.Key_C and event.modifiers() & Qt.ControlModifier:
                 self.reject()
                 return
+            if self._current_page == "main" and event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
+                self._start_intro_transition()
+                return
             if self._current_page == "analysis":
                 if event.key() == Qt.Key_R and self._smoother is not None:
                     self._smoother.reset()
@@ -1041,6 +1176,7 @@ if QDialog is not None:
 
 def run_qt_bodycheck(
     args: argparse.Namespace,
+    main_layout: np.ndarray,
     survey_layout: np.ndarray,
     typea_layout: np.ndarray,
 ) -> int:
@@ -1052,6 +1188,8 @@ def run_qt_bodycheck(
         app = QApplication(sys.argv)
 
     dialog = SurveyDialog(
+        MAIN_LAYOUT_PATH,
+        compute_main_logo_rect(main_layout),
         QNA_LAYOUT_PATH,
         compute_survey_button_rect(survey_layout),
         typea_layout,
@@ -1062,7 +1200,25 @@ def run_qt_bodycheck(
     if screen is not None:
         dialog.setGeometry(screen.geometry())
     dialog.showFullScreen()
-    dialog.exec_()
+    keepalive_timer = QTimer()
+    keepalive_timer.setInterval(150)
+    keepalive_timer.timeout.connect(lambda: None)
+    keepalive_timer.start()
+
+    previous_sigint_handler = signal.getsignal(signal.SIGINT)
+
+    def _handle_sigint(_signum, _frame) -> None:
+        if dialog.isVisible():
+            dialog.reject()
+        else:
+            app.quit()
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+    try:
+        dialog.exec_()
+    finally:
+        keepalive_timer.stop()
+        signal.signal(signal.SIGINT, previous_sigint_handler)
     summary = dialog.final_summary()
     if summary:
         print(summary)
@@ -1125,7 +1281,7 @@ def draw_survey_complete_button(
         radius=max(12, radius - 8),
     )
 
-    text_color = blend_colors(border_color, (48, 56, 76), 0.55)
+    text_color = SURVEY_TEXT_COLOR
     draw_centered_korean_text(frame, rect, SURVEY_BUTTON_TEXT, font_size, text_color)
 
 
@@ -1183,8 +1339,8 @@ def render_survey_base_frame(background: np.ndarray) -> np.ndarray:
         (0, 0, 0, 0),
     )
     draw = ImageDraw.Draw(text_layer)
-    title_color = (0, 0, 0)
-    option_color = (0, 0, 0)
+    title_color = SURVEY_TEXT_COLOR
+    option_color = SURVEY_TEXT_COLOR
 
     for section in SURVEY_SECTION_SPECS:
         draw_text_in_rect_on_pil(
@@ -1220,7 +1376,7 @@ def draw_survey_checkboxes(frame: np.ndarray, ui_state: UiState) -> None:
     option_index = 0
     checked_fill = (177, 198, 244)
     checked_border = (122, 151, 226)
-    check_color = (73, 102, 184)
+    check_color = SURVEY_TEXT_COLOR
     hover_fill = (240, 244, 252)
 
     for section in SURVEY_SECTION_SPECS:
@@ -1518,15 +1674,15 @@ def draw_preview_wait_badge(
     blend_rounded_panel(
         frame,
         badge_rect,
-        fill_color=(241, 247, 255),
-        alpha=0.92,
+        fill_color=(34, 44, 60),
+        alpha=0.82,
         radius=18,
-        border_color=(163, 191, 236),
+        border_color=(189, 207, 239),
         border_thickness=2,
     )
-    cv2.circle(frame, (badge_x + 24, badge_y + (badge_height // 2)), 6, (118, 198, 255), -1, cv2.LINE_AA)
+    cv2.circle(frame, (badge_x + 24, badge_y + (badge_height // 2)), 6, (216, 232, 255), -1, cv2.LINE_AA)
     text_rect = (badge_x + 38, badge_y, badge_width - 44, badge_height)
-    draw_centered_korean_text(frame, text_rect, message, 21, (67, 97, 156))
+    draw_centered_korean_text(frame, text_rect, message, 21, OVERLAY_TEXT_PRIMARY)
 
 
 def create_face_detector() -> cv2.CascadeClassifier:
@@ -2049,17 +2205,17 @@ def draw_overlay(
     cv2.rectangle(overlay, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h), (18, 18, 18), -1)
     cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
 
-    text_y = draw_text_block(frame, (panel_x + 14, panel_y + 28), "BodyCheck", (255, 255, 255), 0.72, 2)
+    text_y = draw_text_block(frame, (panel_x + 14, panel_y + 28), "BodyCheck", OVERLAY_TEXT_PRIMARY, 0.72, 2)
     text_y = draw_text_block(
         frame,
         (panel_x + 14, text_y),
         "Q: quit | R: reset | F: flip | O: rotate",
-        (210, 210, 210),
+        OVERLAY_TEXT_SECONDARY,
         0.52,
         1,
     )
 
-    status_color = (80, 220, 120) if detection_ok else (0, 180, 255)
+    status_color = OVERLAY_TEXT_GUIDE_READY if detection_ok else OVERLAY_TEXT_GUIDE_WAIT
     for line in guidance_lines:
         text_y = draw_text_block(frame, (panel_x + 14, text_y + 4), line, status_color, 0.54, 2)
 
@@ -2074,7 +2230,8 @@ def draw_overlay(
             else f"{reading.value:.3f}"
         )
         line = f"{reading.label}: {display_value}"
-        text_y = draw_text_block(frame, (panel_x + 14, text_y), line, reading.color, 0.55, 2)
+        metric_text_color = OVERLAY_TEXT_METRIC_COLORS.get(reading.status, OVERLAY_TEXT_PRIMARY)
+        text_y = draw_text_block(frame, (panel_x + 14, text_y), line, metric_text_color, 0.55, 2)
 
 
 def draw_reference_lines(frame: np.ndarray, landmarks, landmark_enum) -> None:
@@ -2200,6 +2357,16 @@ def run() -> int:
     flip_view = not args.no_flip
     rotation = args.rotation
     try:
+        main_layout = load_ui_layout(MAIN_LAYOUT_PATH)
+    except RuntimeError as exc:
+        print(str(exc))
+        return 1
+
+    if main_layout is None:
+        print(f"UI layout image not found: {MAIN_LAYOUT_PATH}")
+        return 1
+
+    try:
         survey_layout = load_ui_layout(QNA_LAYOUT_PATH)
     except RuntimeError as exc:
         print(str(exc))
@@ -2219,7 +2386,7 @@ def run() -> int:
         if typea_layout is None:
             print(f"UI layout image not found: {TYPEA_LAYOUT_PATH}")
             return 1
-        return run_qt_bodycheck(args, survey_layout, typea_layout)
+        return run_qt_bodycheck(args, main_layout, survey_layout, typea_layout)
 
     window_initialized = False
     survey_height, survey_width = survey_layout.shape[:2]
