@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import math
 import sys
 import time
 import urllib.request
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Deque, Dict, Iterable, Optional, Tuple
@@ -20,6 +21,30 @@ except ImportError:  # pragma: no cover - depends on local environment
     Image = None
     ImageDraw = None
     ImageFont = None
+
+try:
+    from PyQt5.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, Qt, QRect, QTimer
+    from PyQt5.QtGui import QFont, QImage, QPainter, QPen, QPixmap
+    from PyQt5.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QPushButton, QStyle, QStyleOptionButton
+except ImportError:  # pragma: no cover - depends on local environment
+    QApplication = None
+    QCheckBox = None
+    QDialog = None
+    QLabel = None
+    QPushButton = None
+    QPixmap = None
+    QFont = None
+    QPainter = None
+    QPen = None
+    QStyle = None
+    QStyleOptionButton = None
+    QEasingCurve = None
+    QParallelAnimationGroup = None
+    QPropertyAnimation = None
+    QRect = None
+    QTimer = None
+    QImage = None
+    Qt = None
 
 try:
     import mediapipe as mp
@@ -49,7 +74,9 @@ COMMON_CAPTURE_MODES = (
     (960, 540),
     (640, 480),
 )
-UI_LAYOUT_PATH = Path(__file__).resolve().parent / "UI" / "TypeA.png"
+UI_DIR = Path(__file__).resolve().parent / "UI"
+QNA_LAYOUT_PATH = UI_DIR / "QnA.png"
+TYPEA_LAYOUT_PATH = UI_DIR / "TypeA.png"
 # Approximate search box for the inner rounded camera area in UI/TypeA.png.
 BODY_CAMERA_RECT = (102, 141, 485, 818)
 FACE_A_CAMERA_RECT = (676, 139, 549, 325)
@@ -57,6 +84,17 @@ FACE_B_CAMERA_RECT = (1296, 139, 549, 325)
 BODY_CAMERA_MARGIN = 0
 BODY_CAMERA_RADIUS = 23
 FACE_CAMERA_RADIUS = 26
+SURVEY_BUTTON_TEXT = "설문완료"
+SURVEY_BUTTON_WIDTH_RATIO = 0.075
+SURVEY_BUTTON_HEIGHT_RATIO = 0.046
+SURVEY_BUTTON_RIGHT_MARGIN_RATIO = 0.012
+SURVEY_BUTTON_BOTTOM_MARGIN_RATIO = 0.018
+SURVEY_BUTTON_RADIUS_RATIO = 0.45
+SURVEY_BUTTON_SAFE_GAP_RATIO = 0.004
+SURVEY_TITLE_FONT_SIZE = 24
+SURVEY_OPTION_FONT_SIZE = 18
+SURVEY_TEXT_RENDER_SCALE = 4
+TONGUE_PREVIEW_HOLD_FRAMES = 8
 
 
 @dataclass(frozen=True)
@@ -89,6 +127,107 @@ class MetricReading:
 class PoseDetection:
     landmarks: Optional[list]
     raw_result: object = None
+
+
+@dataclass
+class UiState:
+    current_page: str = "survey"
+    survey_button_rect: Tuple[int, int, int, int] = (0, 0, 0, 0)
+    survey_button_hovered: bool = False
+    survey_completed: bool = False
+    survey_button_accent: Color = (242, 196, 160)
+    survey_option_states: list[bool] = field(default_factory=list)
+    survey_hovered_option: Optional[int] = None
+    survey_base_frame: Optional[np.ndarray] = None
+
+
+@dataclass(frozen=True)
+class SurveySectionSpec:
+    title: str
+    options: Tuple[str, ...]
+    title_rect: Tuple[int, int, int, int]
+    option_rects: Tuple[Tuple[int, int, int, int], ...]
+    checkbox_rects: Tuple[Tuple[int, int, int, int], ...]
+    click_rects: Tuple[Tuple[int, int, int, int], ...]
+
+
+SURVEY_LEFT_SECTIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    (
+        "소양인",
+        (
+            "성격이 급하고 추진력이 강함",
+            "더위에 약하고 땀이 많음",
+            "얼굴/상체에 열이 잘 오름",
+            "잠이 얕고 예민함",
+        ),
+    ),
+    (
+        "태음인",
+        (
+            "체격이 크거나 살이 잘 찜",
+            "참을성이 많고 느긋함",
+            "땀을 흘리면 개운함",
+            "호흡기/피로/비만 경향",
+        ),
+    ),
+    (
+        "소음인",
+        (
+            "손발이 차고 추위를 탐",
+            "소화가 약하고 설사/복통",
+            "신중하고 걱정이 많음",
+            "적게 먹어도 배부름",
+        ),
+    ),
+    (
+        "태양인 (희귀)",
+        (
+            "가슴/어깨 발달",
+            "하체/복부 약함",
+            "리더형/독립적",
+            "소변/피로 문제",
+        ),
+    ),
+)
+
+SURVEY_RIGHT_SECTIONS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    (
+        "열 성향",
+        (
+            "얼굴이 자주 붉어짐",
+            "입 마름, 불면",
+            "염증/트러블 잦음",
+            "",
+        ),
+    ),
+    (
+        "냉 성향",
+        (
+            "손발 차가움",
+            "따뜻한 음식 선호",
+            "복부 냉감",
+            "",
+        ),
+    ),
+    (
+        "허 성향",
+        (
+            "쉽게 피곤",
+            "숨참, 기력 부족",
+            "회복 느림",
+            "",
+        ),
+    ),
+    (
+        "담/정체 성향",
+        (
+            "몸이 무겁다",
+            "가래/부종",
+            "눌렀을 때 단단함",
+            "",
+        ),
+    ),
+)
 
 
 METRIC_SPECS: Dict[str, MetricSpec] = {
@@ -250,14 +389,908 @@ def configure_capture_mode(cap: cv2.VideoCapture, width: int, height: int) -> Tu
     return actual_width, actual_height
 
 
-def load_ui_layout() -> Optional[np.ndarray]:
-    if not UI_LAYOUT_PATH.exists():
+def load_ui_layout(layout_path: Path) -> Optional[np.ndarray]:
+    if not layout_path.exists():
         return None
 
-    layout = cv2.imread(str(UI_LAYOUT_PATH))
+    layout = cv2.imread(str(layout_path))
     if layout is None:
-        raise RuntimeError(f"Failed to load UI layout image: {UI_LAYOUT_PATH}")
+        raise RuntimeError(f"Failed to load UI layout image: {layout_path}")
     return layout
+
+
+def set_window_arrow_cursor(window_name: str) -> None:
+    if not sys.platform.startswith("win"):
+        return
+
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, window_name)
+        if not hwnd:
+            return
+
+        cursor = user32.LoadCursorW(None, 32512)  # IDC_ARROW
+        if not cursor:
+            return
+
+        gclp_hcursor = -12
+        if hasattr(user32, "SetClassLongPtrW"):
+            user32.SetClassLongPtrW(hwnd, gclp_hcursor, cursor)
+        else:
+            user32.SetClassLongW(hwnd, gclp_hcursor, cursor)
+        user32.SetCursor(cursor)
+        user32.SendMessageW(hwnd, 0x20, hwnd, 1)  # WM_SETCURSOR / HTCLIENT
+    except Exception:
+        return
+
+
+def set_window_fullscreen_borderless(window_name: str) -> None:
+    if sys.platform.startswith("win"):
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = user32.FindWindowW(None, window_name)
+            if not hwnd:
+                return
+
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
+            gwi_style = -16
+            ws_visible = 0x10000000
+            ws_popup = 0x80000000
+            swp_framechanged = 0x0020
+            swp_showwindow = 0x0040
+
+            user32.SetWindowLongW(hwnd, gwi_style, ws_visible | ws_popup)
+            user32.SetWindowPos(
+                hwnd,
+                0,
+                0,
+                0,
+                screen_width,
+                screen_height,
+                swp_framechanged | swp_showwindow,
+            )
+            if hasattr(cv2, "WND_PROP_FULLSCREEN") and hasattr(cv2, "WINDOW_FULLSCREEN"):
+                cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+            return
+        except Exception:
+            pass
+
+    if hasattr(cv2, "WND_PROP_FULLSCREEN") and hasattr(cv2, "WINDOW_FULLSCREEN"):
+        try:
+            cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        except cv2.error:
+            return
+
+
+def clamp_color(color: Iterable[float]) -> Color:
+    return tuple(max(0, min(255, int(round(channel)))) for channel in color)
+
+
+def blend_colors(base: Color, target: Color, weight: float) -> Color:
+    weight = max(0.0, min(1.0, weight))
+    return clamp_color(
+        (base[index] * (1.0 - weight)) + (target[index] * weight)
+        for index in range(3)
+    )
+
+
+def estimate_layout_accent_color(layout: np.ndarray) -> Color:
+    hsv = cv2.cvtColor(layout, cv2.COLOR_BGR2HSV)
+    saturation_mask = hsv[:, :, 1] > 40
+    value_mask = hsv[:, :, 2] > 120
+    mask = saturation_mask & value_mask
+    if not np.any(mask):
+        return (242, 196, 160)
+
+    pixels = layout[mask]
+    mean_color = np.mean(pixels, axis=0)
+    return clamp_color(mean_color)
+
+
+def estimate_survey_content_right_edge(background: np.ndarray) -> int:
+    canvas_height, canvas_width = background.shape[:2]
+    scan_top = int(canvas_height * 0.8)
+    region = background[scan_top:, :]
+    if region.size == 0:
+        return int(canvas_width * 0.9)
+
+    active_mask = np.any(region < 245, axis=2)
+    min_pixels = max(6, int(region.shape[0] * 0.08))
+    active_columns = np.where(active_mask.sum(axis=0) > min_pixels)[0]
+    if active_columns.size == 0:
+        return int(canvas_width * 0.9)
+    return int(active_columns.max())
+
+
+def compute_survey_button_rect(background: np.ndarray) -> Tuple[int, int, int, int]:
+    canvas_height, canvas_width = background.shape[:2]
+    margin_right = max(18, int(canvas_width * SURVEY_BUTTON_RIGHT_MARGIN_RATIO))
+    margin_bottom = max(16, int(canvas_height * SURVEY_BUTTON_BOTTOM_MARGIN_RATIO))
+    safe_gap = max(8, int(canvas_width * SURVEY_BUTTON_SAFE_GAP_RATIO))
+    preferred_width = max(120, int(canvas_width * SURVEY_BUTTON_WIDTH_RATIO))
+    button_height = max(46, int(canvas_height * SURVEY_BUTTON_HEIGHT_RATIO))
+    content_right_edge = estimate_survey_content_right_edge(background)
+    max_safe_width = canvas_width - content_right_edge - safe_gap - margin_right
+    button_width = min(preferred_width, max(110, max_safe_width))
+    button_x = canvas_width - button_width - margin_right
+    button_y = canvas_height - button_height - margin_bottom
+    return button_x, button_y, button_width, button_height
+
+
+def build_survey_section_specs() -> Tuple[SurveySectionSpec, ...]:
+    title_x_positions = (225, 1085)
+    option_x_positions = (268, 1128)
+    checkbox_x_positions = (231, 1091)
+    section_title_y_positions = (92, 311, 530, 749)
+    option_box_offsets = (62, 100, 138, 176)
+    checkbox_offsets = (69, 107, 145, 183)
+    title_size = (582, 53)
+    option_size = (539, 36)
+    checkbox_size = (22, 22)
+    section_columns = (SURVEY_LEFT_SECTIONS, SURVEY_RIGHT_SECTIONS)
+
+    sections: list[SurveySectionSpec] = []
+    for column_index, column_sections in enumerate(section_columns):
+        title_x = title_x_positions[column_index]
+        option_x = option_x_positions[column_index]
+        checkbox_x = checkbox_x_positions[column_index]
+        for row_index, (title, options) in enumerate(column_sections):
+            title_y = section_title_y_positions[row_index]
+            title_rect = (title_x, title_y, title_size[0], title_size[1])
+            option_rects: list[Tuple[int, int, int, int]] = []
+            checkbox_rects: list[Tuple[int, int, int, int]] = []
+            click_rects: list[Tuple[int, int, int, int]] = []
+            for option_offset, checkbox_offset in zip(option_box_offsets, checkbox_offsets):
+                option_y = title_y + option_offset
+                checkbox_y = title_y + checkbox_offset
+                option_rect = (option_x, option_y, option_size[0], option_size[1])
+                checkbox_rect = (checkbox_x, checkbox_y, checkbox_size[0], checkbox_size[1])
+                click_rect = (checkbox_x - 6, option_y, (option_x + option_size[0]) - (checkbox_x - 6), option_size[1])
+                option_rects.append(option_rect)
+                checkbox_rects.append(checkbox_rect)
+                click_rects.append(click_rect)
+
+            sections.append(
+                SurveySectionSpec(
+                    title=title,
+                    options=options,
+                    title_rect=title_rect,
+                    option_rects=tuple(option_rects),
+                    checkbox_rects=tuple(checkbox_rects),
+                    click_rects=tuple(click_rects),
+                )
+            )
+    return tuple(sections)
+
+
+SURVEY_SECTION_SPECS = build_survey_section_specs()
+SURVEY_OPTION_COUNT = sum(len(section.options) for section in SURVEY_SECTION_SPECS)
+
+
+if QDialog is not None:
+
+    class TransparentSurveyCheckBox(QCheckBox):
+        def paintEvent(self, event) -> None:
+            super().paintEvent(event)
+            if not self.isChecked() or QPainter is None or QPen is None or QStyle is None or QStyleOptionButton is None:
+                return
+
+            option = QStyleOptionButton()
+            self.initStyleOption(option)
+            indicator_rect = self.style().subElementRect(QStyle.SE_CheckBoxIndicator, option, self)
+
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            pen = QPen()
+            pen.setColor(Qt.black)
+            pen.setWidth(2)
+            pen.setCapStyle(Qt.RoundCap)
+            pen.setJoinStyle(Qt.RoundJoin)
+            painter.setPen(pen)
+
+            inset = max(1, indicator_rect.width() // 6)
+            left = indicator_rect.left() + inset
+            top = indicator_rect.top() + inset
+            right = indicator_rect.right() - inset
+            bottom = indicator_rect.bottom() - inset
+            mid_x = left + int((right - left) * 0.35)
+            mid_y = top + int((bottom - top) * 0.65)
+            check_points = [
+                (left, top + int((bottom - top) * 0.55)),
+                (mid_x, bottom),
+                (right, top),
+            ]
+            for start, end in zip(check_points, check_points[1:]):
+                painter.drawLine(start[0], start[1], end[0], end[1])
+
+    class SurveyDialog(QDialog):
+        def __init__(
+            self,
+            background_path: Path,
+            button_rect: Tuple[int, int, int, int],
+            analysis_layout: np.ndarray,
+            args: argparse.Namespace,
+            initial_states: Optional[list[bool]] = None,
+        ) -> None:
+            super().__init__()
+            self._base_size = (1920, 1080)
+            self._background_pixmap = QPixmap(str(background_path))
+            self._button_rect = button_rect
+            self._analysis_layout = analysis_layout
+            self._args = args
+            self._option_states = list(initial_states or ([False] * SURVEY_OPTION_COUNT))
+            self._titles: list[Tuple[QLabel, Tuple[int, int, int, int]]] = []
+            self._checkboxes: list[Tuple[QCheckBox, Tuple[int, int, int, int]]] = []
+            self._transition_group = None
+            self._transition_overlays: list[QLabel] = []
+            self._current_page = "survey"
+            self._analysis_frame: Optional[np.ndarray] = None
+            self._summary_text: Optional[str] = None
+            self._backend = None
+            self._cap = None
+            self._analyzer = None
+            self._face_detector = None
+            self._smoother: Optional[MetricSmoother] = None
+            self._last_tongue_preview: Optional[np.ndarray] = None
+            self._tongue_preview_hold_frames = 0
+            self._flip_view = not args.no_flip
+            self._rotation = args.rotation
+            self._frame_timer = QTimer(self)
+            self._frame_timer.setInterval(15)
+            self._frame_timer.timeout.connect(self._update_analysis_frame)
+
+            self._ui_body_target = resolve_body_camera_target(self._analysis_layout)
+            self._ui_face_target = resolve_face_camera_target(self._analysis_layout, FACE_A_CAMERA_RECT)
+            self._ui_tongue_target = resolve_face_camera_target(self._analysis_layout, FACE_B_CAMERA_RECT)
+            self._face_preview_aspect_ratio = self._ui_face_target[0][2] / max(1.0, self._ui_face_target[0][3])
+            self._tongue_preview_aspect_ratio = self._ui_tongue_target[0][2] / max(1.0, self._ui_tongue_target[0][3])
+            self._loading_frame = compose_loading_ui_frame(
+                self._analysis_layout,
+                "--",
+                self._ui_body_target,
+                self._ui_face_target,
+                self._ui_tongue_target,
+            )
+
+            self.setWindowTitle(WINDOW_NAME)
+            self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+            self.setObjectName("SurveyDialog")
+            self.setStyleSheet("#SurveyDialog { background-color: #f7f7f7; }")
+
+            self._background_label = QLabel(self)
+            self._background_label.setScaledContents(True)
+            self._background_label.lower()
+
+            self._analysis_label = QLabel(self)
+            self._analysis_label.setScaledContents(True)
+            self._analysis_label.hide()
+            self._analysis_label.lower()
+
+            for section in SURVEY_SECTION_SPECS:
+                title_label = QLabel(section.title, self)
+                title_label.setAlignment(Qt.AlignCenter)
+                title_label.setStyleSheet("background: transparent; color: #000000;")
+                self._titles.append((title_label, section.title_rect))
+
+                for option_text, option_rect, checkbox_rect in zip(
+                    section.options,
+                    section.option_rects,
+                    section.checkbox_rects,
+                ):
+                    if not option_text:
+                        continue
+                    checkbox_row_rect = (
+                        checkbox_rect[0],
+                        option_rect[1],
+                        (option_rect[0] + option_rect[2]) - checkbox_rect[0],
+                        option_rect[3],
+                    )
+                    checkbox = TransparentSurveyCheckBox(option_text, self)
+                    checkbox.setStyleSheet(
+                        """
+                        QCheckBox {
+                            background: transparent;
+                            color: #000000;
+                            spacing: 23px;
+                            padding: 0px;
+                        }
+                        QCheckBox::indicator {
+                            width: 18px;
+                            height: 18px;
+                            background: transparent;
+                            border: none;
+                        }
+                        QCheckBox::indicator:unchecked {
+                            background: transparent;
+                            border: none;
+                            image: none;
+                        }
+                        QCheckBox::indicator:checked {
+                            background: transparent;
+                            border: none;
+                            image: none;
+                        }
+                        """
+                    )
+                    self._checkboxes.append((checkbox, checkbox_row_rect))
+
+            self._complete_button = QPushButton(SURVEY_BUTTON_TEXT, self)
+            self._complete_button.clicked.connect(self._start_transition)
+            self._complete_button.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: rgba(191, 210, 244, 0.96);
+                    color: #2b3550;
+                    border: 2px solid rgba(125, 146, 193, 0.95);
+                    border-radius: 26px;
+                    padding: 2px 10px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(205, 220, 248, 0.98);
+                }
+                QPushButton:pressed {
+                    background-color: rgba(177, 199, 238, 0.98);
+                }
+                """
+            )
+
+        def option_states(self) -> list[bool]:
+            return [checkbox.isChecked() for checkbox, _ in self._checkboxes]
+
+        def final_summary(self) -> Optional[str]:
+            return self._summary_text
+
+        def _cleanup_transition_overlays(self) -> None:
+            for overlay in self._transition_overlays:
+                overlay.hide()
+                overlay.deleteLater()
+            self._transition_overlays = []
+
+        def _hide_survey_widgets(self) -> None:
+            self._background_label.hide()
+            for label, _ in self._titles:
+                label.hide()
+            for checkbox, _ in self._checkboxes:
+                checkbox.hide()
+            self._complete_button.hide()
+
+        def _set_analysis_frame(self, frame: np.ndarray) -> None:
+            self._analysis_frame = frame.copy()
+            if QImage is None:
+                return
+
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            height, width = rgb_frame.shape[:2]
+            qimage = QImage(rgb_frame.data, width, height, rgb_frame.strides[0], QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimage.copy())
+            self._analysis_label.setPixmap(
+                pixmap.scaled(
+                    self.size(),
+                    Qt.IgnoreAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            )
+
+        def _start_transition(self) -> None:
+            self._option_states = self.option_states()
+            self._analysis_label.show()
+            self._analysis_label.lower()
+            self._set_analysis_frame(self._loading_frame)
+
+            if (
+                QParallelAnimationGroup is None
+                or QPropertyAnimation is None
+                or QRect is None
+                or QEasingCurve is None
+            ):
+                self._finish_transition()
+                return
+
+            current_snapshot = self.grab()
+            if current_snapshot.isNull():
+                self._finish_transition()
+                return
+
+            width = self.width()
+            height = self.height()
+
+            current_overlay = QLabel(self)
+            current_overlay.setPixmap(current_snapshot)
+            current_overlay.setGeometry(0, 0, width, height)
+            current_overlay.show()
+            current_overlay.raise_()
+
+            next_overlay = QLabel(self)
+            if self._analysis_label.pixmap() is not None:
+                next_overlay.setPixmap(self._analysis_label.pixmap())
+            next_overlay.setGeometry(width, 0, width, height)
+            next_overlay.show()
+            next_overlay.raise_()
+
+            self._transition_overlays = [current_overlay, next_overlay]
+
+            current_animation = QPropertyAnimation(current_overlay, b"geometry", self)
+            current_animation.setDuration(340)
+            current_animation.setStartValue(QRect(0, 0, width, height))
+            current_animation.setEndValue(QRect(-width, 0, width, height))
+            current_animation.setEasingCurve(QEasingCurve.OutCubic)
+
+            next_animation = QPropertyAnimation(next_overlay, b"geometry", self)
+            next_animation.setDuration(340)
+            next_animation.setStartValue(QRect(width, 0, width, height))
+            next_animation.setEndValue(QRect(0, 0, width, height))
+            next_animation.setEasingCurve(QEasingCurve.OutCubic)
+
+            self._transition_group = QParallelAnimationGroup(self)
+            self._transition_group.addAnimation(current_animation)
+            self._transition_group.addAnimation(next_animation)
+            self._transition_group.finished.connect(self._finish_transition)
+            self._transition_group.start()
+
+        def _finish_transition(self) -> None:
+            self._current_page = "analysis"
+            self._hide_survey_widgets()
+            self._analysis_label.show()
+            self._analysis_label.raise_()
+            self._cleanup_transition_overlays()
+            QTimer.singleShot(0, self._start_analysis)
+
+        def _start_analysis(self) -> None:
+            try:
+                self._backend = create_pose_backend(
+                    model_variant=self._args.model_variant,
+                    model_path=self._args.model_path,
+                )
+                self._smoother = MetricSmoother(METRIC_SPECS.keys(), max(3, self._args.smooth))
+                self._analyzer = BodyPostureAnalyzer(
+                    self._backend.landmark_enum,
+                    min_visibility=self._args.min_visibility,
+                )
+                self._face_detector = create_face_detector()
+                self._cap, capture_size = open_camera(
+                    self._args.camera,
+                    self._args.width,
+                    self._args.height,
+                )
+                print(
+                    f"Survey complete. Starting posture analysis with {self._backend.backend_name}. "
+                    f"Camera capture: {capture_size[0]}x{capture_size[1]}"
+                )
+                self._frame_timer.start()
+            except Exception as exc:
+                print(str(exc))
+                self.reject()
+
+        def _update_analysis_frame(self) -> None:
+            if self._cap is None or self._backend is None or self._analyzer is None or self._smoother is None:
+                return
+
+            ok, frame = self._cap.read()
+            if not ok:
+                print("Failed to read from webcam.")
+                self.reject()
+                return
+
+            frame = apply_rotation(frame, self._rotation)
+            if self._flip_view:
+                frame = cv2.flip(frame, 1)
+            raw_frame = frame.copy()
+
+            timestamp_ms = int(time.monotonic() * 1000)
+            detection = self._backend.detect(frame, timestamp_ms)
+
+            readings: Optional[Dict[str, MetricReading]] = None
+            guidance = "Stand naturally facing the camera with your full body visible."
+            detection_ok = False
+
+            metrics, message = self._analyzer.analyze(detection.landmarks)
+            if metrics is not None:
+                detection_ok = True
+                averaged = self._smoother.update(metrics)
+                readings = {
+                    metric_name: classify_metric(metric_name, metric_value)
+                    for metric_name, metric_value in averaged.items()
+                }
+                guidance = "Stable reading. Relax your arms and keep both feet on the floor."
+            else:
+                guidance = message or guidance
+
+            face_preview = crop_face_region(
+                raw_frame,
+                self._face_detector,
+                target_aspect_ratio=self._face_preview_aspect_ratio,
+            )
+            tongue_preview = None
+            if face_preview is not None:
+                tongue_detected, _tongue_score, mouth_preview = detect_tongue_in_face(
+                    face_preview,
+                    preview_aspect_ratio=self._tongue_preview_aspect_ratio,
+                )
+                if tongue_detected and mouth_preview is not None:
+                    self._last_tongue_preview = mouth_preview.copy()
+                    tongue_preview = mouth_preview
+                    self._tongue_preview_hold_frames = TONGUE_PREVIEW_HOLD_FRAMES
+                elif self._last_tongue_preview is not None and self._tongue_preview_hold_frames > 0:
+                    tongue_preview = self._last_tongue_preview
+                    self._tongue_preview_hold_frames -= 1
+                else:
+                    self._last_tongue_preview = None
+                    self._tongue_preview_hold_frames = 0
+            else:
+                self._last_tongue_preview = None
+                self._tongue_preview_hold_frames = 0
+
+            if detection.landmarks:
+                self._backend.draw(frame, detection)
+                draw_reference_lines(frame, detection.landmarks, self._backend.landmark_enum)
+
+            display_frame = compose_ui_frame(
+                self._analysis_layout,
+                frame,
+                face_preview,
+                tongue_preview,
+                readings,
+                guidance,
+                detection_ok,
+                self._ui_body_target,
+                self._ui_face_target,
+                self._ui_tongue_target,
+            )
+            self._set_analysis_frame(display_frame)
+
+        def _scale_rect(self, rect: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
+            base_width, base_height = self._base_size
+            scale_x = self.width() / max(1.0, float(base_width))
+            scale_y = self.height() / max(1.0, float(base_height))
+            x, y, width, height = rect
+            return (
+                int(round(x * scale_x)),
+                int(round(y * scale_y)),
+                max(1, int(round(width * scale_x))),
+                max(1, int(round(height * scale_y))),
+            )
+
+        def _apply_layout(self) -> None:
+            self._background_label.setGeometry(self.rect())
+            if not self._background_pixmap.isNull():
+                self._background_label.setPixmap(
+                    self._background_pixmap.scaled(
+                        self.size(),
+                        Qt.IgnoreAspectRatio,
+                        Qt.SmoothTransformation,
+                    )
+                )
+
+            self._analysis_label.setGeometry(self.rect())
+            if self._analysis_frame is not None:
+                self._set_analysis_frame(self._analysis_frame)
+
+            scale = min(
+                self.width() / max(1.0, float(self._base_size[0])),
+                self.height() / max(1.0, float(self._base_size[1])),
+            )
+            title_font = QFont("Malgun Gothic", max(14, int(round(24 * scale))))
+            title_font.setWeight(QFont.DemiBold)
+            option_font = QFont("Malgun Gothic", max(11, int(round(15 * scale))))
+            option_font.setWeight(QFont.Medium)
+            button_font = QFont("Malgun Gothic", max(10, int(round(15 * scale))))
+            button_font.setWeight(QFont.DemiBold)
+
+            for label, rect in self._titles:
+                x, y, width, height = self._scale_rect(rect)
+                label.setGeometry(x, y, width, height)
+                label.setFont(title_font)
+
+            for index, (checkbox, rect) in enumerate(self._checkboxes):
+                x, y, width, height = self._scale_rect(rect)
+                checkbox.setGeometry(x, y, width, height)
+                checkbox.setFont(option_font)
+                checkbox.setChecked(self._option_states[index])
+
+            button_x, button_y, button_width, button_height = self._scale_rect(self._button_rect)
+            self._complete_button.setGeometry(button_x, button_y, button_width, button_height)
+            self._complete_button.setFont(button_font)
+
+        def _cleanup_analysis(self) -> None:
+            if self._frame_timer.isActive():
+                self._frame_timer.stop()
+            if self._cap is not None:
+                self._cap.release()
+                self._cap = None
+            if self._backend is not None:
+                self._backend.close()
+                self._backend = None
+
+            if self._smoother is not None:
+                self._summary_text = summarize(self._smoother.latest())
+
+        def resizeEvent(self, event) -> None:
+            self._apply_layout()
+            super().resizeEvent(event)
+
+        def showEvent(self, event) -> None:
+            super().showEvent(event)
+            self._apply_layout()
+
+        def closeEvent(self, event) -> None:
+            self._cleanup_analysis()
+            super().closeEvent(event)
+
+        def keyPressEvent(self, event) -> None:
+            if event.key() in (Qt.Key_Escape, Qt.Key_Q):
+                self.reject()
+                return
+            if event.key() == Qt.Key_C and event.modifiers() & Qt.ControlModifier:
+                self.reject()
+                return
+            if self._current_page == "analysis":
+                if event.key() == Qt.Key_R and self._smoother is not None:
+                    self._smoother.reset()
+                    self._last_tongue_preview = None
+                    self._tongue_preview_hold_frames = 0
+                    return
+                if event.key() == Qt.Key_F:
+                    self._flip_view = not self._flip_view
+                    return
+                if event.key() == Qt.Key_O:
+                    self._rotation = next_rotation(self._rotation)
+                    return
+            super().keyPressEvent(event)
+
+
+def run_qt_bodycheck(
+    args: argparse.Namespace,
+    survey_layout: np.ndarray,
+    typea_layout: np.ndarray,
+) -> int:
+    if QApplication is None or QDialog is None or QPixmap is None or Qt is None:
+        return 1
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    dialog = SurveyDialog(
+        QNA_LAYOUT_PATH,
+        compute_survey_button_rect(survey_layout),
+        typea_layout,
+        args,
+        initial_states=[False] * SURVEY_OPTION_COUNT,
+    )
+    screen = app.primaryScreen()
+    if screen is not None:
+        dialog.setGeometry(screen.geometry())
+    dialog.showFullScreen()
+    dialog.exec_()
+    summary = dialog.final_summary()
+    if summary:
+        print(summary)
+    return 0
+
+
+def point_in_rect(x: int, y: int, rect: Tuple[int, int, int, int]) -> bool:
+    rect_x, rect_y, rect_width, rect_height = rect
+    return rect_x <= x <= rect_x + rect_width and rect_y <= y <= rect_y + rect_height
+
+
+def find_survey_option_index(x: int, y: int) -> Optional[int]:
+    option_index = 0
+    for section in SURVEY_SECTION_SPECS:
+        for option_text, click_rect in zip(section.options, section.click_rects):
+            if option_text and point_in_rect(x, y, click_rect):
+                return option_index
+            option_index += 1
+    return None
+
+
+def draw_survey_complete_button(
+    frame: np.ndarray,
+    rect: Tuple[int, int, int, int],
+    hovered: bool,
+    accent_color: Color,
+) -> None:
+    x, y, width, height = rect
+    radius = max(18, int(height * SURVEY_BUTTON_RADIUS_RATIO))
+    font_size = max(18, int(height * 0.38)) + (1 if hovered else 0)
+
+    shadow_rect = (x, y + 6, width, height)
+    shadow_color = blend_colors(accent_color, (205, 210, 220), 0.58)
+    blend_rounded_panel(
+        frame,
+        shadow_rect,
+        fill_color=shadow_color,
+        alpha=0.22,
+        radius=radius,
+    )
+
+    fill_color = blend_colors(accent_color, (255, 255, 255), 0.12 if hovered else 0.2)
+    border_color = blend_colors(accent_color, (108, 120, 150), 0.38 if hovered else 0.48)
+    blend_rounded_panel(
+        frame,
+        rect,
+        fill_color=fill_color,
+        alpha=0.97,
+        radius=radius,
+        border_color=border_color,
+        border_thickness=3 if hovered else 2,
+    )
+
+    highlight_rect = (x + 10, y + 8, width - 20, max(18, int(height * 0.32)))
+    blend_rounded_panel(
+        frame,
+        highlight_rect,
+        fill_color=(255, 255, 255),
+        alpha=0.18 if hovered else 0.11,
+        radius=max(12, radius - 8),
+    )
+
+    text_color = blend_colors(border_color, (48, 56, 76), 0.55)
+    draw_centered_korean_text(frame, rect, SURVEY_BUTTON_TEXT, font_size, text_color)
+
+
+def draw_text_in_rect_on_pil(
+    draw: ImageDraw.ImageDraw,
+    rect: Tuple[int, int, int, int],
+    text: str,
+    font_size: int,
+    color: Color,
+    align: str = "left",
+    padding_x: int = 0,
+    render_scale: int = 1,
+) -> None:
+    if not text:
+        return
+
+    scaled_font_size = max(1, int(font_size * max(1, render_scale)))
+    font = get_survey_korean_font(scaled_font_size)
+    if font is None:
+        return
+
+    scale = max(1, int(render_scale))
+    x, y, width, height = rect
+    x *= scale
+    y *= scale
+    width *= scale
+    height *= scale
+    scaled_padding_x = padding_x * scale
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    if align == "center":
+        text_x = x + max(0.0, (width - text_width) / 2.0)
+    else:
+        text_x = x + scaled_padding_x
+    text_y = y + max(0.0, (height - text_height) / 2.0) - float(scale)
+    draw.text(
+        (int(round(text_x)), int(round(text_y))),
+        text,
+        font=font,
+        fill=(color[2], color[1], color[0], 255),
+    )
+
+
+def render_survey_base_frame(background: np.ndarray) -> np.ndarray:
+    canvas = background.copy()
+    if Image is None or ImageDraw is None:
+        return canvas
+
+    pil_image = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
+    render_scale = max(1, SURVEY_TEXT_RENDER_SCALE)
+    text_layer = Image.new(
+        "RGBA",
+        (pil_image.width * render_scale, pil_image.height * render_scale),
+        (0, 0, 0, 0),
+    )
+    draw = ImageDraw.Draw(text_layer)
+    title_color = (0, 0, 0)
+    option_color = (0, 0, 0)
+
+    for section in SURVEY_SECTION_SPECS:
+        draw_text_in_rect_on_pil(
+            draw,
+            section.title_rect,
+            section.title,
+            SURVEY_TITLE_FONT_SIZE,
+            title_color,
+            align="center",
+            render_scale=render_scale,
+        )
+        for option_text, option_rect in zip(section.options, section.option_rects):
+            draw_text_in_rect_on_pil(
+                draw,
+                option_rect,
+                option_text,
+                SURVEY_OPTION_FONT_SIZE,
+                option_color,
+                align="left",
+                padding_x=18,
+                render_scale=render_scale,
+            )
+
+    if render_scale > 1:
+        lanczos = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+        text_layer = text_layer.resize(pil_image.size, lanczos)
+
+    pil_image.alpha_composite(text_layer)
+    return cv2.cvtColor(np.array(pil_image.convert("RGB")), cv2.COLOR_RGB2BGR)
+
+
+def draw_survey_checkboxes(frame: np.ndarray, ui_state: UiState) -> None:
+    option_index = 0
+    checked_fill = (177, 198, 244)
+    checked_border = (122, 151, 226)
+    check_color = (73, 102, 184)
+    hover_fill = (240, 244, 252)
+
+    for section in SURVEY_SECTION_SPECS:
+        for checkbox_rect, option_text in zip(section.checkbox_rects, section.options):
+            if not option_text:
+                option_index += 1
+                continue
+
+            x, y, width, height = checkbox_rect
+            if ui_state.survey_hovered_option == option_index and not ui_state.survey_option_states[option_index]:
+                blend_rounded_panel(
+                    frame,
+                    (x + 2, y + 2, max(1, width - 4), max(1, height - 4)),
+                    fill_color=hover_fill,
+                    alpha=0.85,
+                    radius=5,
+                )
+
+            if ui_state.survey_option_states[option_index]:
+                blend_rounded_panel(
+                    frame,
+                    (x + 2, y + 2, max(1, width - 4), max(1, height - 4)),
+                    fill_color=checked_fill,
+                    alpha=0.95,
+                    radius=5,
+                    border_color=checked_border,
+                    border_thickness=1,
+                )
+                check_points = np.array(
+                    [
+                        (x + 5, y + (height // 2)),
+                        (x + 9, y + height - 6),
+                        (x + width - 5, y + 5),
+                    ],
+                    dtype=np.int32,
+                )
+                cv2.polylines(frame, [check_points], False, check_color, 2, cv2.LINE_AA)
+
+            option_index += 1
+
+
+def compose_survey_page(background: np.ndarray, ui_state: UiState) -> np.ndarray:
+    canvas = ui_state.survey_base_frame.copy() if ui_state.survey_base_frame is not None else background.copy()
+    draw_survey_checkboxes(canvas, ui_state)
+    draw_survey_complete_button(
+        canvas,
+        ui_state.survey_button_rect,
+        ui_state.survey_button_hovered,
+        ui_state.survey_button_accent,
+    )
+    return canvas
+
+
+def handle_mouse_event(event: int, x: int, y: int, flags: int, ui_state: UiState) -> None:
+    del flags
+    if ui_state is None or ui_state.current_page != "survey":
+        return
+
+    set_window_arrow_cursor(WINDOW_NAME)
+    button_hovered = point_in_rect(x, y, ui_state.survey_button_rect)
+    ui_state.survey_button_hovered = button_hovered
+    ui_state.survey_hovered_option = find_survey_option_index(x, y)
+
+    if event == cv2.EVENT_LBUTTONUP and button_hovered:
+        ui_state.survey_completed = True
+        return
+
+    if event == cv2.EVENT_LBUTTONUP and ui_state.survey_hovered_option is not None:
+        option_index = ui_state.survey_hovered_option
+        ui_state.survey_option_states[option_index] = not ui_state.survey_option_states[option_index]
 
 
 def is_window_closed(window_name: str) -> bool:
@@ -398,6 +1431,23 @@ def get_korean_font(font_size: int):
     return ImageFont.load_default()
 
 
+@lru_cache(maxsize=8)
+def get_survey_korean_font(font_size: int):
+    if ImageFont is None:
+        return None
+
+    candidates = (
+        Path("C:/Windows/Fonts/malgun.ttf"),
+        Path("C:/Windows/Fonts/malgunbd.ttf"),
+        Path("C:/Windows/Fonts/Hancom Gothic Regular.ttf"),
+        Path("C:/Windows/Fonts/Hancom Gothic Bold.ttf"),
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return ImageFont.truetype(str(candidate), font_size)
+    return get_korean_font(font_size)
+
+
 def draw_centered_korean_text(
     frame: np.ndarray,
     rect: Tuple[int, int, int, int],
@@ -515,55 +1565,179 @@ def expand_face_rect(face_rect: Tuple[int, int, int, int], frame_shape: Tuple[in
     return left, top, max(1, right - left), max(1, bottom - top)
 
 
-def crop_face_region(frame: np.ndarray, face_detector: cv2.CascadeClassifier) -> Optional[np.ndarray]:
+def adjust_rect_to_aspect(
+    rect: Tuple[int, int, int, int],
+    frame_shape: Tuple[int, int, int],
+    target_aspect_ratio: float,
+    vertical_bias: float = 0.0,
+) -> Tuple[int, int, int, int]:
+    x, y, width, height = rect
+    frame_height, frame_width = frame_shape[:2]
+    if target_aspect_ratio <= 0.0:
+        return rect
+
+    center_x = x + (width / 2.0)
+    center_y = y + (height / 2.0) + (height * vertical_bias)
+    new_width = float(width)
+    new_height = float(height)
+    current_ratio = new_width / max(new_height, 1.0)
+    if current_ratio < target_aspect_ratio:
+        new_width = new_height * target_aspect_ratio
+    else:
+        new_height = new_width / target_aspect_ratio
+
+    new_width = min(float(frame_width), new_width)
+    new_height = min(float(frame_height), new_height)
+    left = int(round(center_x - (new_width / 2.0)))
+    top = int(round(center_y - (new_height / 2.0)))
+    right = int(round(left + new_width))
+    bottom = int(round(top + new_height))
+
+    if left < 0:
+        right -= left
+        left = 0
+    if top < 0:
+        bottom -= top
+        top = 0
+    if right > frame_width:
+        left -= right - frame_width
+        right = frame_width
+    if bottom > frame_height:
+        top -= bottom - frame_height
+        bottom = frame_height
+
+    left = max(0, left)
+    top = max(0, top)
+    right = min(frame_width, max(left + 1, right))
+    bottom = min(frame_height, max(top + 1, bottom))
+    return left, top, max(1, right - left), max(1, bottom - top)
+
+
+def crop_rect(frame: np.ndarray, rect: Tuple[int, int, int, int]) -> np.ndarray:
+    x, y, width, height = rect
+    return frame[y : y + height, x : x + width].copy()
+
+
+def crop_face_region(
+    frame: np.ndarray,
+    face_detector: cv2.CascadeClassifier,
+    target_aspect_ratio: Optional[float] = None,
+) -> Optional[np.ndarray]:
     face_rect = detect_primary_face(frame, face_detector)
     if face_rect is None:
         return None
 
-    x, y, width, height = expand_face_rect(face_rect, frame.shape)
-    return frame[y : y + height, x : x + width].copy()
+    crop_rect_xywh = expand_face_rect(face_rect, frame.shape)
+    if target_aspect_ratio is not None:
+        crop_rect_xywh = adjust_rect_to_aspect(
+            crop_rect_xywh,
+            frame.shape,
+            target_aspect_ratio,
+            vertical_bias=0.05,
+        )
+    return crop_rect(frame, crop_rect_xywh)
 
 
-def detect_tongue_in_face(face_crop: Optional[np.ndarray]) -> Tuple[bool, float]:
+def extract_mouth_region(
+    face_crop: Optional[np.ndarray],
+    target_aspect_ratio: Optional[float] = None,
+) -> Optional[np.ndarray]:
     if face_crop is None:
-        return False, 0.0
+        return None
 
     face_height, face_width = face_crop.shape[:2]
-    mouth_x1 = int(face_width * 0.22)
-    mouth_x2 = int(face_width * 0.78)
-    mouth_y1 = int(face_height * 0.56)
-    mouth_y2 = int(face_height * 0.94)
-    mouth = face_crop[mouth_y1:mouth_y2, mouth_x1:mouth_x2]
+    mouth_rect = (
+        int(face_width * 0.18),
+        int(face_height * 0.52),
+        max(1, int(face_width * 0.64)),
+        max(1, int(face_height * 0.42)),
+    )
+    if target_aspect_ratio is not None:
+        mouth_rect = adjust_rect_to_aspect(
+            mouth_rect,
+            face_crop.shape,
+            target_aspect_ratio,
+            vertical_bias=0.18,
+        )
+    return crop_rect(face_crop, mouth_rect)
+
+
+def detect_tongue_in_face(
+    face_crop: Optional[np.ndarray],
+    preview_aspect_ratio: Optional[float] = None,
+) -> Tuple[bool, float, Optional[np.ndarray]]:
+    if face_crop is None:
+        return False, 0.0, None
+
+    mouth = extract_mouth_region(face_crop)
+    preview = extract_mouth_region(face_crop, preview_aspect_ratio)
     if mouth.size == 0:
-        return False, 0.0
+        return False, 0.0, preview
 
     hsv = cv2.cvtColor(mouth, cv2.COLOR_BGR2HSV)
     lab = cv2.cvtColor(mouth, cv2.COLOR_BGR2LAB)
-    red_mask_1 = cv2.inRange(hsv, (0, 35, 45), (18, 255, 255))
-    red_mask_2 = cv2.inRange(hsv, (160, 35, 45), (179, 255, 255))
+    red_mask_1 = cv2.inRange(hsv, (0, 24, 35), (24, 255, 255))
+    red_mask_2 = cv2.inRange(hsv, (160, 24, 35), (179, 255, 255))
     red_mask = cv2.bitwise_or(red_mask_1, red_mask_2)
-    warm_mask = cv2.inRange(lab[:, :, 1], 148, 255)
-    mask = cv2.bitwise_and(red_mask, warm_mask)
-    kernel = np.ones((5, 5), dtype=np.uint8)
+    warm_mask = cv2.inRange(lab[:, :, 1], 138, 255)
+
+    blue, green, red = cv2.split(mouth)
+    red_dominant = (
+        (red.astype(np.int16) >= green.astype(np.int16) + 10)
+        & (red.astype(np.int16) >= blue.astype(np.int16) + 8)
+        & (red >= 55)
+    )
+    bright_enough = hsv[:, :, 2] >= 40
+    mask = np.where(
+        (red_mask > 0) & (warm_mask > 0) & red_dominant & bright_enough,
+        255,
+        0,
+    ).astype(np.uint8)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        return False, 0.0
+        return False, 0.0, preview
 
     contour = max(contours, key=cv2.contourArea)
     area = float(cv2.contourArea(contour))
     mouth_area = float(mouth.shape[0] * mouth.shape[1])
     if mouth_area <= 0.0:
-        return False, 0.0
+        return False, 0.0, preview
 
     x, y, width, height = cv2.boundingRect(contour)
     area_ratio = area / mouth_area
+    center_x_ratio = (x + (width * 0.5)) / max(1.0, mouth.shape[1])
     lower_bias = (y + (height * 0.5)) / max(1.0, mouth.shape[0])
-    score = area_ratio * (0.5 + lower_bias)
-    detected = area_ratio >= 0.018 and lower_bias >= 0.42 and width >= mouth.shape[1] * 0.12
-    return detected, score
+    lower_half = mask[int(mouth.shape[0] * 0.52) :, :]
+    upper_half = mask[: int(mouth.shape[0] * 0.44), :]
+    center_band = mask[:, int(mouth.shape[1] * 0.22) : int(mouth.shape[1] * 0.78)]
+    lower_ratio = cv2.countNonZero(lower_half) / max(1.0, lower_half.size)
+    upper_ratio = cv2.countNonZero(upper_half) / max(1.0, upper_half.size)
+    center_ratio = cv2.countNonZero(center_band) / max(1.0, center_band.size)
+    center_bias = max(0.0, 1.0 - abs(center_x_ratio - 0.5) * 2.0)
+    score = (
+        area_ratio * 1.4
+        + lower_ratio * 1.1
+        + center_ratio * 0.8
+        + lower_bias * 0.35
+        + center_bias * 0.25
+        - upper_ratio * 0.2
+    )
+    detected = (
+        area_ratio >= 0.008
+        and lower_bias >= 0.45
+        and width >= mouth.shape[1] * 0.10
+        and height >= mouth.shape[0] * 0.10
+        and center_bias >= 0.22
+        and lower_ratio >= 0.012
+        and center_ratio >= 0.010
+        and lower_ratio >= upper_ratio * 0.85
+    )
+    return detected, score, preview
 
 
 def compose_ui_frame(
@@ -585,15 +1759,34 @@ def compose_ui_frame(
 
     paste_frame_in_mask(canvas, body_preview_frame, body_rect, body_mask, fit_mode="cover")
     if face_preview_frame is not None:
-        paste_frame_in_mask(canvas, face_preview_frame, face_rect, face_mask, fit_mode="contain")
+        paste_frame_in_mask(canvas, face_preview_frame, face_rect, face_mask, fit_mode="cover")
     else:
         draw_preview_wait_badge(canvas, face_rect, "얼굴 감지중...")
 
     if tongue_preview_frame is not None:
-        paste_frame_in_mask(canvas, tongue_preview_frame, tongue_rect, tongue_mask, fit_mode="contain")
+        paste_frame_in_mask(canvas, tongue_preview_frame, tongue_rect, tongue_mask, fit_mode="cover")
     else:
         draw_preview_wait_badge(canvas, tongue_rect, "혀 감지중...")
     draw_overlay(canvas, body_rect, readings, guidance, detection_ok)
+    return canvas
+
+
+def compose_loading_ui_frame(
+    background: np.ndarray,
+    guidance: str,
+    body_target: Tuple[Tuple[int, int, int, int], np.ndarray],
+    face_target: Tuple[Tuple[int, int, int, int], np.ndarray],
+    tongue_target: Tuple[Tuple[int, int, int, int], np.ndarray],
+) -> np.ndarray:
+    canvas = background.copy()
+    body_rect, _ = body_target
+    face_rect, _ = face_target
+    tongue_rect, _ = tongue_target
+
+    draw_preview_wait_badge(canvas, body_rect, "준비중...")
+    draw_preview_wait_badge(canvas, face_rect, "준비중...")
+    draw_preview_wait_badge(canvas, tongue_rect, "준비중...")
+    draw_overlay(canvas, body_rect, None, guidance, False)
     return canvas
 
 
@@ -1004,50 +2197,132 @@ def parse_args() -> argparse.Namespace:
 
 def run() -> int:
     args = parse_args()
-    smoother = MetricSmoother(METRIC_SPECS.keys(), max(3, args.smooth))
     flip_view = not args.no_flip
     rotation = args.rotation
     try:
-        ui_layout = load_ui_layout()
+        survey_layout = load_ui_layout(QNA_LAYOUT_PATH)
     except RuntimeError as exc:
         print(str(exc))
         return 1
 
-    ui_body_target: Optional[Tuple[Tuple[int, int, int, int], np.ndarray]] = None
-    ui_face_target: Optional[Tuple[Tuple[int, int, int, int], np.ndarray]] = None
-    ui_tongue_target: Optional[Tuple[Tuple[int, int, int, int], np.ndarray]] = None
-    if ui_layout is not None:
-        display_height, display_width = ui_layout.shape[:2]
-        ui_body_target = resolve_body_camera_target(ui_layout)
-        ui_face_target = resolve_face_camera_target(ui_layout, FACE_A_CAMERA_RECT)
-        ui_tongue_target = resolve_face_camera_target(ui_layout, FACE_B_CAMERA_RECT)
-    else:
-        display_width, display_height = portrait_display_size(args.width, args.height)
-
-    try:
-        backend = create_pose_backend(model_variant=args.model_variant, model_path=args.model_path)
-    except Exception as exc:
-        print(str(exc))
+    if survey_layout is None:
+        print(f"UI layout image not found: {QNA_LAYOUT_PATH}")
         return 1
 
-    analyzer = BodyPostureAnalyzer(backend.landmark_enum, min_visibility=args.min_visibility)
-    face_detector = create_face_detector()
-    last_tongue_preview: Optional[np.ndarray] = None
+    if QApplication is not None and QDialog is not None and QPixmap is not None and Qt is not None:
+        try:
+            typea_layout = load_ui_layout(TYPEA_LAYOUT_PATH)
+        except RuntimeError as exc:
+            print(str(exc))
+            return 1
 
-    try:
-        cap, capture_size = open_camera(args.camera, args.width, args.height)
-    except RuntimeError as exc:
-        backend.close()
-        print(str(exc))
-        return 1
+        if typea_layout is None:
+            print(f"UI layout image not found: {TYPEA_LAYOUT_PATH}")
+            return 1
+        return run_qt_bodycheck(args, survey_layout, typea_layout)
 
-    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WINDOW_NAME, display_width, display_height)
-    print(
-        f"Starting BodyCheck. Press Q to quit. Using {backend.backend_name}. "
-        f"Camera capture: {capture_size[0]}x{capture_size[1]}"
+    window_initialized = False
+    survey_height, survey_width = survey_layout.shape[:2]
+    ui_state = UiState(
+        survey_button_rect=compute_survey_button_rect(survey_layout),
+        survey_button_accent=estimate_layout_accent_color(survey_layout),
+        survey_option_states=[False] * SURVEY_OPTION_COUNT,
+        survey_base_frame=render_survey_base_frame(survey_layout),
     )
+    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+    cv2.setMouseCallback(WINDOW_NAME, handle_mouse_event, ui_state)
+    set_window_fullscreen_borderless(WINDOW_NAME)
+    set_window_arrow_cursor(WINDOW_NAME)
+    print("Starting BodyCheck. Press Q to quit. Complete the survey page to continue.")
+    while not ui_state.survey_completed:
+        if is_window_closed(WINDOW_NAME):
+            return 0
+
+        survey_frame = compose_survey_page(survey_layout, ui_state)
+        cv2.imshow(WINDOW_NAME, survey_frame)
+        set_window_arrow_cursor(WINDOW_NAME)
+
+        key = cv2.waitKey(16) & 0xFF
+        if is_window_closed(WINDOW_NAME):
+            return 0
+        if key == 3:
+            return 0
+        if key == ord("q"):
+            return 0
+        if key in (13, 32):
+            ui_state.survey_completed = True
+    window_initialized = True
+
+    smoother: Optional[MetricSmoother] = None
+    backend = None
+    cap = None
     try:
+        try:
+            typea_layout = load_ui_layout(TYPEA_LAYOUT_PATH)
+        except RuntimeError as exc:
+            print(str(exc))
+            return 1
+
+        if typea_layout is None:
+            print(f"UI layout image not found: {TYPEA_LAYOUT_PATH}")
+            return 1
+
+        if not window_initialized:
+            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+        set_window_fullscreen_borderless(WINDOW_NAME)
+        set_window_arrow_cursor(WINDOW_NAME)
+
+        smoother = MetricSmoother(METRIC_SPECS.keys(), max(3, args.smooth))
+        display_height, display_width = typea_layout.shape[:2]
+        ui_body_target = resolve_body_camera_target(typea_layout)
+        ui_face_target = resolve_face_camera_target(typea_layout, FACE_A_CAMERA_RECT)
+        ui_tongue_target = resolve_face_camera_target(typea_layout, FACE_B_CAMERA_RECT)
+        face_preview_aspect_ratio = ui_face_target[0][2] / max(1.0, ui_face_target[0][3])
+        tongue_preview_aspect_ratio = ui_tongue_target[0][2] / max(1.0, ui_tongue_target[0][3])
+        set_window_fullscreen_borderless(WINDOW_NAME)
+
+        loading_frame = compose_loading_ui_frame(
+            typea_layout,
+            "--",
+            ui_body_target,
+            ui_face_target,
+            ui_tongue_target,
+        )
+        cv2.imshow(WINDOW_NAME, loading_frame)
+        cv2.waitKey(1)
+
+        try:
+            backend = create_pose_backend(model_variant=args.model_variant, model_path=args.model_path)
+        except Exception as exc:
+            print(str(exc))
+            return 1
+
+        loading_frame = compose_loading_ui_frame(
+            typea_layout,
+            "--",
+            ui_body_target,
+            ui_face_target,
+            ui_tongue_target,
+        )
+        cv2.imshow(WINDOW_NAME, loading_frame)
+        cv2.waitKey(1)
+
+        analyzer = BodyPostureAnalyzer(backend.landmark_enum, min_visibility=args.min_visibility)
+        face_detector = create_face_detector()
+        last_tongue_preview: Optional[np.ndarray] = None
+        tongue_preview_hold_frames = 0
+
+        try:
+            cap, capture_size = open_camera(args.camera, args.width, args.height)
+        except RuntimeError as exc:
+            print(str(exc))
+            return 1
+
+        print(
+            f"Survey complete. Starting posture analysis with {backend.backend_name}. "
+            f"Camera capture: {capture_size[0]}x{capture_size[1]}"
+        )
+
         while True:
             if is_window_closed(WINDOW_NAME):
                 break
@@ -1081,63 +2356,80 @@ def run() -> int:
             else:
                 guidance = message or guidance
 
-            face_preview = crop_face_region(raw_frame, face_detector)
-            tongue_preview = last_tongue_preview
-            if face_preview is not None and last_tongue_preview is None:
-                tongue_detected, _tongue_score = detect_tongue_in_face(face_preview)
-                if tongue_detected:
-                    last_tongue_preview = face_preview.copy()
+            face_preview = crop_face_region(
+                raw_frame,
+                face_detector,
+                target_aspect_ratio=face_preview_aspect_ratio,
+            )
+            tongue_preview = None
+            if face_preview is not None:
+                tongue_detected, _tongue_score, mouth_preview = detect_tongue_in_face(
+                    face_preview,
+                    preview_aspect_ratio=tongue_preview_aspect_ratio,
+                )
+                if tongue_detected and mouth_preview is not None:
+                    last_tongue_preview = mouth_preview.copy()
+                    tongue_preview = mouth_preview
+                    tongue_preview_hold_frames = TONGUE_PREVIEW_HOLD_FRAMES
+                elif last_tongue_preview is not None and tongue_preview_hold_frames > 0:
                     tongue_preview = last_tongue_preview
+                    tongue_preview_hold_frames -= 1
+                else:
+                    last_tongue_preview = None
+                    tongue_preview_hold_frames = 0
+            else:
+                last_tongue_preview = None
+                tongue_preview_hold_frames = 0
 
             if detection.landmarks:
                 backend.draw(frame, detection)
                 draw_reference_lines(frame, detection.landmarks, backend.landmark_enum)
 
-            if ui_layout is not None:
-                display_frame = compose_ui_frame(
-                    ui_layout,
-                    frame,
-                    face_preview,
-                    tongue_preview,
-                    readings,
-                    guidance,
-                    detection_ok,
-                    ui_body_target,
-                    ui_face_target,
-                    ui_tongue_target,
-                )
-            else:
-                display_frame = fit_frame_to_canvas(frame, display_width, display_height)
-                draw_overlay(
-                    display_frame,
-                    (12, 12, display_width - 24, display_height - 24),
-                    readings,
-                    guidance,
-                    detection_ok,
-                )
+            display_frame = compose_ui_frame(
+                typea_layout,
+                frame,
+                face_preview,
+                tongue_preview,
+                readings,
+                guidance,
+                detection_ok,
+                ui_body_target,
+                ui_face_target,
+                ui_tongue_target,
+            )
             cv2.imshow(WINDOW_NAME, display_frame)
 
             key = cv2.waitKey(1) & 0xFF
             if is_window_closed(WINDOW_NAME):
+                break
+            if key == 3:
                 break
             if key == ord("q"):
                 break
             if key == ord("r"):
                 smoother.reset()
                 last_tongue_preview = None
+                tongue_preview_hold_frames = 0
                 print("Averaged posture metrics and tongue preview reset.")
             if key == ord("f"):
                 flip_view = not flip_view
             if key == ord("o"):
                 rotation = next_rotation(rotation)
     finally:
-        cap.release()
-        backend.close()
+        if cap is not None:
+            cap.release()
+        if backend is not None:
+            backend.close()
         cv2.destroyAllWindows()
 
-    print(summarize(smoother.latest()))
+    if smoother is not None:
+        print(summarize(smoother.latest()))
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(run())
+    try:
+        raise SystemExit(run())
+    except KeyboardInterrupt:
+        cv2.destroyAllWindows()
+        raise SystemExit(0)
