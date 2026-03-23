@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 typea_left_box_edges_preview.png
 users.local.json
+Android/.gradle/
+Android/build/
+Android/app/build/
+Android/local.properties
+Android/.idea/
+Android/server/
+.server_pid.txt

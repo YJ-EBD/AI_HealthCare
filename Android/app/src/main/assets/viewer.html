@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+    <title>AI 헬스케어 시스템</title>
+    <style>
+        :root {
+            --bg: #eef4fb;
+            --panel: #ffffff;
+            --panel-soft: #f6faff;
+            --line: #d7e5f6;
+            --text: #142033;
+            --muted: #667892;
+            --accent: #2f80ff;
+            --accent-soft: rgba(47, 128, 255, 0.12);
+            --guide: rgba(47, 128, 255, 0.86);
+            --guide-soft: rgba(47, 128, 255, 0.18);
+            --shadow: 0 16px 32px rgba(28, 56, 94, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+            background:
+                radial-gradient(circle at top left, rgba(47, 128, 255, 0.10), transparent 24%),
+                linear-gradient(180deg, #f7fbff, var(--bg));
+            color: var(--text);
+            font-family: "Malgun Gothic", "Segoe UI", sans-serif;
+        }
+
+        .app {
+            min-height: 100vh;
+            padding: 20px;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 18px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px 20px;
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.86);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: clamp(28px, 4vw, 40px);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+        }
+
+        .main {
+            display: grid;
+            align-items: start;
+            justify-items: center;
+        }
+
+        .camera-card {
+            width: min(100%, 1120px);
+            padding: 22px;
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+        }
+
+        .camera-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .camera-title {
+            min-width: 0;
+        }
+
+        .camera-title h2 {
+            margin: 0;
+            font-size: clamp(22px, 3vw, 30px);
+            line-height: 1.15;
+        }
+
+        .camera-title p {
+            margin: 8px 0 0;
+            color: var(--muted);
+            font-size: 15px;
+        }
+
+        .status-pill {
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .video-stage {
+            position: relative;
+            overflow: hidden;
+            aspect-ratio: 16 / 9;
+            border-radius: 24px;
+            border: 1px solid var(--line);
+            background:
+                linear-gradient(180deg, rgba(8, 20, 39, 0.94), rgba(14, 31, 58, 0.98));
+        }
+
+        .video-stage video,
+        .video-empty,
+        .guide-overlay,
+        .video-footer {
+            position: absolute;
+            inset: 0;
+        }
+
+        .video-stage video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            background: #07111c;
+        }
+
+        .video-stage.live video {
+            display: block;
+        }
+
+        .video-empty {
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            color: #d6e3f5;
+            text-align: center;
+            line-height: 1.7;
+            background: linear-gradient(180deg, rgba(7, 17, 28, 0.44), rgba(7, 17, 28, 0.92));
+        }
+
+        .video-stage.live .video-empty {
+            display: none;
+        }
+
+        .guide-overlay {
+            pointer-events: none;
+        }
+
+        .guide-outline {
+            position: absolute;
+            left: 50%;
+            top: 49%;
+            width: min(42vw, 42%);
+            height: min(56vw, 70%);
+            transform: translate(-50%, -50%);
+            border: 3px solid var(--guide);
+            border-radius: 46% 46% 42% 42% / 38% 38% 52% 52%;
+            box-shadow:
+                0 0 0 8px var(--guide-soft),
+                0 0 20px rgba(47, 128, 255, 0.22);
+        }
+
+        .guide-outline::before,
+        .guide-outline::after {
+            content: "";
+            position: absolute;
+            top: 30%;
+            width: 24%;
+            height: 10%;
+            border-top: 3px solid rgba(255, 255, 255, 0.82);
+            border-radius: 999px 999px 0 0;
+        }
+
+        .guide-outline::before {
+            left: 18%;
+            transform: rotate(-6deg);
+        }
+
+        .guide-outline::after {
+            right: 18%;
+            transform: rotate(6deg);
+        }
+
+        .nose-guide {
+            position: absolute;
+            left: 50%;
+            top: 47%;
+            width: 10%;
+            height: 14%;
+            transform: translate(-50%, -50%);
+            border-left: 3px solid rgba(255, 214, 122, 0.88);
+            border-right: 3px solid rgba(255, 214, 122, 0.88);
+            border-radius: 999px;
+            opacity: 0.88;
+        }
+
+        .chin-guide {
+            position: absolute;
+            left: 50%;
+            bottom: 22%;
+            width: 20%;
+            height: 10%;
+            transform: translateX(-50%);
+            border-bottom: 3px solid rgba(255, 255, 255, 0.88);
+            border-radius: 0 0 999px 999px;
+        }
+
+        .guide-text {
+            position: absolute;
+            left: 50%;
+            bottom: 20px;
+            transform: translateX(-50%);
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: rgba(10, 20, 36, 0.68);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #f3f8ff;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .video-footer {
+            inset: auto 16px 16px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        .footer-chip {
+            padding: 10px 12px;
+            border-radius: 999px;
+            background: rgba(8, 17, 31, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #dce9fb;
+            font-size: 12px;
+        }
+
+        .footer-chip.accent {
+            color: #9bc4ff;
+        }
+
+        .bottom-status {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 16px;
+        }
+
+        .status-card {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: var(--panel-soft);
+            border: 1px solid var(--line);
+        }
+
+        .status-card span {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .status-card strong {
+            display: block;
+            font-size: 15px;
+            line-height: 1.35;
+        }
+
+        @media (max-width: 900px) {
+            .bottom-status {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .app {
+                padding: 12px;
+            }
+
+            .header {
+                border-radius: 18px;
+                padding: 14px 16px;
+            }
+
+            .camera-card {
+                padding: 14px;
+                border-radius: 20px;
+            }
+
+            .camera-head {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .guide-outline {
+                width: 58%;
+                height: 72%;
+            }
+
+            .guide-text {
+                width: calc(100% - 32px);
+                white-space: normal;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header class="header">
+        <h1>AI 헬스케어 시스템</h1>
+    </header>
+
+    <main class="main">
+        <section class="camera-card">
+            <div class="camera-head">
+                <div class="camera-title">
+                    <h2>얼굴 건강 상태 확인</h2>
+                    <p>얼굴이 윤곽선 안에 들어오도록 맞춘 뒤 정면을 바라봐 주세요.</p>
+                </div>
+                <div class="status-pill" id="statusText">연결 준비 중</div>
+            </div>
+
+            <div class="video-stage" id="videoStage">
+                <video id="faceVideo" autoplay playsinline muted></video>
+                <div class="video-empty" id="emptyState">
+                    얼굴 카메라에 연결하는 중입니다.<br>
+                    카메라가 켜져 있는지 확인해 주세요.
+                </div>
+                <div class="guide-overlay">
+                    <div class="guide-outline"></div>
+                    <div class="nose-guide"></div>
+                    <div class="chin-guide"></div>
+                    <div class="guide-text">얼굴을 윤곽선 중앙에 맞춰 주세요</div>
+                </div>
+                <div class="video-footer">
+                    <div class="footer-chip accent" id="streamChip">스트림 대기</div>
+                    <div class="footer-chip" id="serverLabel">서버 탐색 중</div>
+                </div>
+            </div>
+
+            <div class="bottom-status">
+                <div class="status-card">
+                    <span>연결 상태</span>
+                    <strong id="connectionDetail">대기 중</strong>
+                </div>
+                <div class="status-card">
+                    <span>촬영 상태</span>
+                    <strong id="captureDetail">얼굴 위치 확인</strong>
+                </div>
+                <div class="status-card">
+                    <span>안내</span>
+                    <strong id="guideDetail">정면을 유지해 주세요</strong>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const serverUrl = (params.get("serverUrl") || "").replace(/\/+$/, "");
+    const requestedTracks = Math.max(1, Number(params.get("tracks") || 1));
+
+    const statusText = document.getElementById("statusText");
+    const serverLabel = document.getElementById("serverLabel");
+    const streamChip = document.getElementById("streamChip");
+    const connectionDetail = document.getElementById("connectionDetail");
+    const captureDetail = document.getElementById("captureDetail");
+    const guideDetail = document.getElementById("guideDetail");
+    const videoStage = document.getElementById("videoStage");
+    const faceVideo = document.getElementById("faceVideo");
+    const emptyState = document.getElementById("emptyState");
+
+    const state = {
+        pc: null,
+        reconnectTimer: null,
+        disposed: false,
+        connecting: false,
+    };
+
+    function postStatus(message) {
+        statusText.textContent = message;
+        connectionDetail.textContent = message;
+        if (window.AndroidBridge && typeof window.AndroidBridge.postStatus === "function") {
+            window.AndroidBridge.postStatus(message);
+        }
+        console.log(message);
+    }
+
+    function postError(message) {
+        statusText.textContent = "오류";
+        connectionDetail.textContent = "오류";
+        if (window.AndroidBridge && typeof window.AndroidBridge.postError === "function") {
+            window.AndroidBridge.postError(message);
+        }
+        console.error(message);
+    }
+
+    function setStreamState(isLive, message) {
+        videoStage.classList.toggle("live", isLive);
+        emptyState.style.display = isLive ? "none" : "grid";
+        streamChip.textContent = message;
+        captureDetail.textContent = message;
+        guideDetail.textContent = isLive ? "윤곽선 안에 얼굴을 맞춰 주세요" : "정면을 유지해 주세요";
+    }
+
+    function clearReconnectTimer() {
+        if (state.reconnectTimer) {
+            window.clearTimeout(state.reconnectTimer);
+            state.reconnectTimer = null;
+        }
+    }
+
+    function scheduleReconnect(reason) {
+        if (state.disposed || state.connecting || state.reconnectTimer) {
+            return;
+        }
+
+        const suffix = reason ? `: ${reason}` : "";
+        postStatus(`3초 후 재연결${suffix}`);
+        state.reconnectTimer = window.setTimeout(() => {
+            state.reconnectTimer = null;
+            connect().catch((error) => {
+                postError(`재연결 실패: ${error.message}`);
+                scheduleReconnect(error.message);
+            });
+        }, 3000);
+    }
+
+    function waitForIceGathering(pc) {
+        if (pc.iceGatheringState === "complete") {
+            return Promise.resolve();
+        }
+
+        return new Promise((resolve) => {
+            const onStateChange = () => {
+                if (pc.iceGatheringState === "complete") {
+                    pc.removeEventListener("icegatheringstatechange", onStateChange);
+                    resolve();
+                }
+            };
+
+            pc.addEventListener("icegatheringstatechange", onStateChange);
+            window.setTimeout(() => {
+                pc.removeEventListener("icegatheringstatechange", onStateChange);
+                resolve();
+            }, 5000);
+        });
+    }
+
+    function attachTrack(event) {
+        const mediaStream = event.streams[0] || new MediaStream([event.track]);
+        faceVideo.srcObject = mediaStream;
+        faceVideo.play().catch((error) => {
+            postError(`비디오 재생 실패: ${error.message}`);
+        });
+
+        setStreamState(true, "얼굴 스트림 수신 중");
+    }
+
+    async function disconnect() {
+        if (state.pc) {
+            state.pc.ontrack = null;
+            state.pc.onconnectionstatechange = null;
+            state.pc.oniceconnectionstatechange = null;
+            state.pc.close();
+            state.pc = null;
+        }
+
+        faceVideo.pause();
+        faceVideo.srcObject = null;
+        setStreamState(false, "스트림 대기");
+    }
+
+    async function shutdown() {
+        state.disposed = true;
+        clearReconnectTimer();
+        await disconnect();
+        postStatus("뷰어 종료");
+    }
+
+    async function connect() {
+        if (state.disposed || state.connecting) {
+            return;
+        }
+        if (!serverUrl) {
+            postError("서버 주소가 비어 있습니다");
+            return;
+        }
+
+        let reconnectReason = null;
+        state.connecting = true;
+        clearReconnectTimer();
+        await disconnect();
+
+        serverLabel.textContent = `${serverUrl}/offer`;
+        postStatus("연결 중");
+
+        const pc = new RTCPeerConnection({
+            iceServers: [],
+            bundlePolicy: "max-bundle",
+        });
+        state.pc = pc;
+
+        for (let index = 0; index < requestedTracks; index += 1) {
+            pc.addTransceiver("video", { direction: "recvonly" });
+        }
+
+        pc.ontrack = attachTrack;
+        pc.onconnectionstatechange = () => {
+            const stateText = `WebRTC ${pc.connectionState}`;
+            postStatus(stateText);
+            if (pc.connectionState === "connected") {
+                connectionDetail.textContent = "연결됨";
+            }
+            if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+                disconnect().then(() => scheduleReconnect(pc.connectionState));
+            }
+        };
+        pc.oniceconnectionstatechange = () => {
+            console.log("ICE:", pc.iceConnectionState);
+        };
+
+        try {
+            streamChip.textContent = "스트림 요청 중";
+            captureDetail.textContent = "카메라 연결 중";
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await waitForIceGathering(pc);
+
+            const response = await fetch(`${serverUrl}/offer`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    sdp: pc.localDescription.sdp,
+                    type: pc.localDescription.type,
+                    requestedTracks,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const answer = await response.json();
+            await pc.setRemoteDescription(answer);
+            postStatus("스트림 응답 수신");
+        } catch (error) {
+            await disconnect();
+            reconnectReason = error.message;
+            throw error;
+        } finally {
+            state.connecting = false;
+            if (reconnectReason) {
+                scheduleReconnect(reconnectReason);
+            }
+        }
+    }
+
+    window.viewerApp = { connect, disconnect, shutdown };
+
+    setStreamState(false, "스트림 대기");
+    serverLabel.textContent = serverUrl ? `${serverUrl}/offer` : "서버 탐색 중";
+    connect().catch((error) => {
+        postError(`초기 연결 실패: ${error.message}`);
+    });
+</script>
+</body>
+</html>
