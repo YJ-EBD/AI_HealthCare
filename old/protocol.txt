@@ -65,3 +65,9 @@ Installed packages
 - typing_extensions==4.15.0
 - typing-inspection==0.4.2
 - urllib3==2.6.3
+
+
+
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1

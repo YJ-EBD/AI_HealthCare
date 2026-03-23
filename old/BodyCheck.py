@@ -25,8 +25,8 @@ except ImportError:  # pragma: no cover - depends on local environment
 
 try:
     from PyQt5.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, Qt, QRect, QTimer
-    from PyQt5.QtGui import QFont, QImage, QPainter, QPen, QPixmap
-    from PyQt5.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QPushButton, QStyle, QStyleOptionButton, QWidget
+    from PyQt5.QtGui import QFont, QImage, QKeySequence, QPainter, QPen, QPixmap
+    from PyQt5.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QPushButton, QShortcut, QStyle, QStyleOptionButton, QWidget
 except ImportError:  # pragma: no cover - depends on local environment
     QApplication = None
     QCheckBox = None
@@ -40,12 +40,14 @@ except ImportError:  # pragma: no cover - depends on local environment
     QStyle = None
     QStyleOptionButton = None
     QWidget = None
+    QShortcut = None
     QEasingCurve = None
     QParallelAnimationGroup = None
     QPropertyAnimation = None
     QRect = None
     QTimer = None
     QImage = None
+    QKeySequence = None
     Qt = None
 
 try:
@@ -704,6 +706,8 @@ if QDialog is not None:
             self._frame_timer = QTimer(self)
             self._frame_timer.setInterval(15)
             self._frame_timer.timeout.connect(self._update_analysis_frame)
+            self._exit_shortcuts: list[QShortcut] = []
+            self._exit_requested = False
 
             self._ui_body_target = resolve_body_camera_target(self._analysis_layout)
             self._ui_face_target = resolve_face_camera_target(self._analysis_layout, FACE_A_CAMERA_RECT)
@@ -763,6 +767,24 @@ if QDialog is not None:
             self._analysis_label = QLabel(self._analysis_page)
             self._analysis_label.setScaledContents(True)
             self._analysis_label.lower()
+
+            self._exit_overlay = QWidget(self)
+            self._exit_overlay.hide()
+            self._exit_overlay.setStyleSheet("background-color: rgba(8, 14, 24, 110);")
+
+            self._exit_popup_label = QLabel("종료중...", self._exit_overlay)
+            self._exit_popup_label.setAlignment(Qt.AlignCenter)
+            self._exit_popup_label.setStyleSheet(
+                """
+                QLabel {
+                    background-color: rgba(19, 28, 42, 236);
+                    color: #f8fbff;
+                    border: 2px solid rgba(175, 196, 228, 0.92);
+                    border-radius: 24px;
+                    padding: 10px 28px;
+                }
+                """
+            )
 
             for section in SURVEY_SECTION_SPECS:
                 title_label = QLabel(section.title, self._survey_page)
@@ -832,6 +854,7 @@ if QDialog is not None:
                 """
             )
 
+            self._install_exit_shortcuts()
             self._show_only_page("main")
 
         def option_states(self) -> list[bool]:
@@ -839,6 +862,72 @@ if QDialog is not None:
 
         def final_summary(self) -> Optional[str]:
             return self._summary_text
+
+        def _install_exit_shortcuts(self) -> None:
+            if QShortcut is None or QKeySequence is None:
+                return
+
+            shortcut_specs = (
+                ("Ctrl+C", True),
+                ("Ctrl+Q", False),
+                ("Esc", False),
+                ("Q", False),
+            )
+            for sequence, show_popup in shortcut_specs:
+                shortcut = QShortcut(QKeySequence(sequence), self)
+                shortcut.setContext(Qt.ApplicationShortcut)
+                shortcut.activated.connect(
+                    lambda show_popup=show_popup: self._request_exit(show_popup=show_popup)
+                )
+                self._exit_shortcuts.append(shortcut)
+
+        def _update_exit_overlay_layout(self) -> None:
+            self._exit_overlay.setGeometry(self.rect())
+            scale = min(
+                self.width() / max(1.0, float(self._base_size[0])),
+                self.height() / max(1.0, float(self._base_size[1])),
+            )
+            popup_width = max(220, int(round(320 * scale)))
+            popup_height = max(96, int(round(132 * scale)))
+            popup_x = max(0, (self.width() - popup_width) // 2)
+            popup_y = max(0, (self.height() - popup_height) // 2)
+            font = QFont("Malgun Gothic", max(14, int(round(22 * scale))))
+            font.setWeight(QFont.DemiBold)
+            self._exit_popup_label.setFont(font)
+            self._exit_popup_label.setGeometry(popup_x, popup_y, popup_width, popup_height)
+
+        def _show_exit_popup(self) -> None:
+            self._update_exit_overlay_layout()
+            self._exit_overlay.show()
+            self._exit_overlay.raise_()
+            self._exit_popup_label.raise_()
+            self._exit_overlay.repaint()
+            self._exit_popup_label.repaint()
+
+        def _finish_exit(self) -> None:
+            self._cleanup_analysis()
+            self.done(0)
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
+
+        def _request_exit(self, show_popup: bool = False) -> None:
+            if self._exit_requested:
+                return
+
+            self._exit_requested = True
+            if self._frame_timer.isActive():
+                self._frame_timer.stop()
+
+            if show_popup:
+                self._show_exit_popup()
+                app = QApplication.instance()
+                if app is not None:
+                    app.processEvents()
+                QTimer.singleShot(80, self._finish_exit)
+                return
+
+            self._finish_exit()
 
         def _show_only_page(self, page_name: str) -> None:
             for name, page in self._pages.items():
@@ -975,7 +1064,7 @@ if QDialog is not None:
                 self._frame_timer.start()
             except Exception as exc:
                 print(str(exc))
-                self.reject()
+                self._request_exit(show_popup=False)
 
         def _update_analysis_frame(self) -> None:
             if self._cap is None or self._backend is None or self._analyzer is None or self._smoother is None:
@@ -984,7 +1073,7 @@ if QDialog is not None:
             ok, frame = self._cap.read()
             if not ok:
                 print("Failed to read from webcam.")
-                self.reject()
+                self._request_exit(show_popup=False)
                 return
 
             frame = apply_rotation(frame, self._rotation)
@@ -1123,6 +1212,7 @@ if QDialog is not None:
             button_x, button_y, button_width, button_height = self._scale_rect(self._survey_button_rect)
             self._complete_button.setGeometry(button_x, button_y, button_width, button_height)
             self._complete_button.setFont(button_font)
+            self._update_exit_overlay_layout()
 
         def _cleanup_analysis(self) -> None:
             if self._frame_timer.isActive():
@@ -1151,10 +1241,10 @@ if QDialog is not None:
 
         def keyPressEvent(self, event) -> None:
             if event.key() in (Qt.Key_Escape, Qt.Key_Q):
-                self.reject()
+                self._request_exit(show_popup=False)
                 return
             if event.key() == Qt.Key_C and event.modifiers() & Qt.ControlModifier:
-                self.reject()
+                self._request_exit(show_popup=True)
                 return
             if self._current_page == "main" and event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
                 self._start_intro_transition()
@@ -1208,10 +1298,7 @@ def run_qt_bodycheck(
     previous_sigint_handler = signal.getsignal(signal.SIGINT)
 
     def _handle_sigint(_signum, _frame) -> None:
-        if dialog.isVisible():
-            dialog.reject()
-        else:
-            app.quit()
+        QTimer.singleShot(0, lambda: dialog._request_exit(show_popup=True))
 
     signal.signal(signal.SIGINT, _handle_sigint)
     try:
@@ -1513,6 +1600,11 @@ def resolve_ui_target(
     contour = max(contours, key=cv2.contourArea)
     mask = np.zeros((comp_h, comp_w), dtype=np.uint8)
     cv2.drawContours(mask, [contour], -1, 255, -1, cv2.LINE_AA)
+    fill_ratio = float(cv2.countNonZero(mask)) / float(mask.size)
+    if fill_ratio < 0.35:
+        # Some layouts expose only the frame border as a contour; in that case
+        # use the detected bounds but fill the full rounded preview area.
+        mask = rounded_rect_mask(comp_w, comp_h, fallback_radius)
     return (search_x + comp_x, search_y + comp_y, comp_w, comp_h), mask
 
 
