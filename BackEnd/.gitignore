@@ -5,11 +5,4 @@ __pycache__/
 *.pid
 .env
 .env.local
-.next/
-node_modules/
-app/
-lib/
-public/
-scripts/
-tsconfig.tsbuildinfo
 worker/__pycache__/

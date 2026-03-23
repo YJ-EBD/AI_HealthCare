@@ -3,3 +3,4 @@ uvicorn[standard]>=0.30
 aiortc>=1.9
 av>=12.0
 opencv-python>=4.10
+mediapipe>=0.10.14

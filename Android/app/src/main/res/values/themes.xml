@@ -2,7 +2,7 @@
 <resources>
     <style name="Theme.AIHealthcareViewer" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/surface</item>
-        <item name="android:statusBarColor">@color/panel</item>
-        <item name="android:navigationBarColor">@color/panel</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

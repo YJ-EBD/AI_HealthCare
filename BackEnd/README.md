@@ -38,13 +38,10 @@ Probe camera indexes:
 C:\AI_HealthCare\.venv\Scripts\python.exe .\main.py --list-cameras
 ```
 
-## Environment example
-
-You can also use `.env` values based on `.env.example`.
-
 ## Defaults
 
 - Host: `0.0.0.0`
 - Port: `8080`
-- Camera size: `640x480`
-- FPS: `15`
+- Camera target: `3840x2160`
+- FPS target: `30`
+- Capture mode: tries the requested high resolution first, then falls back to the best available camera mode automatically
