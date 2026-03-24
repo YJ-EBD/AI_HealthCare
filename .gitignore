@@ -10,3 +10,4 @@ Android/local.properties
 Android/.idea/
 Android/server/
 .server_pid.txt
+tmp_*/

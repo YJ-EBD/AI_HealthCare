@@ -6,6 +6,7 @@
     <title>AI HEALTHCARE</title>
     <style>
         :root {
+            --page-count: 5;
             --text-dark: #6f7f93;
             --text-soft: #92a0b3;
             --accent: #14a7bf;
@@ -41,7 +42,7 @@
 
         .page-track {
             display: flex;
-            width: 300vw;
+            width: calc(var(--page-count) * 100vw);
             height: 100%;
             transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
             will-change: transform;
@@ -270,6 +271,274 @@
             margin: 10px auto 0;
             border-radius: 999px;
             background: linear-gradient(90deg, rgba(122, 201, 230, 0.18), rgba(95, 190, 225, 0.96), rgba(122, 201, 230, 0.18));
+        }
+
+        .selection-copy {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            z-index: 2;
+            width: min(88vw, 470px);
+            transform: translateX(-50%);
+            text-align: center;
+        }
+
+        .selection-copy h1 {
+            margin: 0;
+            color: #64748a;
+            font-size: 44px;
+            font-weight: 700;
+            line-height: 1.12;
+        }
+
+        .selection-copy p {
+            max-width: 410px;
+            margin: 16px auto 0;
+            color: #8fa0b5;
+            font-size: 18px;
+            line-height: 1.55;
+        }
+
+        .gender-grid {
+            position: absolute;
+            top: 18%;
+            left: 50%;
+            z-index: 2;
+            width: min(98vw, 560px);
+            transform: translateX(-50%);
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 22px;
+        }
+
+        .gender-card {
+            position: relative;
+            min-height: 664px;
+            padding: 18px 16px 16px;
+            border: 0;
+            border-radius: 30px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(250, 252, 255, 0.64));
+            box-shadow: 0 22px 42px rgba(154, 184, 211, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+            text-align: center;
+            cursor: pointer;
+            transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+        }
+
+        .gender-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 30px;
+            border: 2px solid rgba(255, 255, 255, 0.65);
+            pointer-events: none;
+        }
+
+        .gender-card.male {
+            background: linear-gradient(180deg, rgba(240, 247, 255, 0.9), rgba(252, 253, 255, 0.74));
+        }
+
+        .gender-card.female {
+            background: linear-gradient(180deg, rgba(255, 244, 250, 0.92), rgba(255, 252, 254, 0.76));
+        }
+
+        .gender-card.is-selected {
+            transform: translateY(-8px) scale(1.01);
+            box-shadow: 0 28px 48px rgba(140, 184, 216, 0.28), 0 0 0 6px rgba(223, 239, 248, 0.9);
+        }
+
+        .gender-card.male.is-selected::before {
+            border-color: rgba(128, 199, 241, 0.95);
+        }
+
+        .gender-card.female.is-selected::before {
+            border-color: rgba(247, 172, 220, 0.95);
+        }
+
+        .gender-art {
+            position: relative;
+            width: 100%;
+            height: 544px;
+            overflow: hidden;
+            border-radius: 24px 24px 20px 20px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(241, 247, 252, 0.34));
+        }
+
+        .gender-art::after {
+            content: "";
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            top: 8%;
+            bottom: 12%;
+            border-radius: 20px;
+            border-left: 2px dashed rgba(255, 255, 255, 0.34);
+            border-right: 2px dashed rgba(255, 255, 255, 0.34);
+            pointer-events: none;
+        }
+
+        .gender-figure {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: contain;
+            object-position: center bottom;
+            filter: drop-shadow(0 18px 24px rgba(138, 173, 198, 0.12));
+        }
+
+        .gender-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+            padding: 18px 16px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #476587;
+            font-size: 24px;
+            font-weight: 700;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+        }
+
+        .gender-card.male .gender-label {
+            color: #3872b3;
+        }
+
+        .gender-card.female .gender-label {
+            color: #c86fa9;
+        }
+
+        .gender-label-symbol {
+            font-size: 46px;
+            line-height: 1;
+        }
+
+        .selection-actions {
+            position: absolute;
+            left: 50%;
+            bottom: 8.8%;
+            z-index: 3;
+            width: min(88vw, 400px);
+            transform: translateX(-50%);
+            display: grid;
+            grid-template-columns: 56px 1fr 56px;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .nav-icon-button {
+            width: 56px;
+            height: 56px;
+            border: 0;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            background: rgba(255, 255, 255, 0.72);
+            color: #8fa0b5;
+            font-size: 28px;
+            box-shadow: var(--shadow-soft);
+            cursor: pointer;
+        }
+
+        .action-button {
+            min-height: 72px;
+            border: 0;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(248, 252, 255, 0.98), rgba(226, 242, 255, 0.9));
+            color: #587188;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            box-shadow: inset 0 0 0 2px rgba(180, 219, 249, 0.96), 0 18px 32px rgba(143, 188, 223, 0.28);
+            cursor: pointer;
+        }
+
+        .action-button:disabled {
+            opacity: 0.48;
+            cursor: default;
+            box-shadow: inset 0 0 0 2px rgba(204, 221, 236, 0.9), 0 12px 22px rgba(174, 193, 207, 0.14);
+        }
+
+        .question-panel {
+            position: absolute;
+            top: 28%;
+            left: 50%;
+            z-index: 2;
+            width: min(88vw, 430px);
+            transform: translateX(-50%);
+            padding: 28px 24px 26px;
+            border-radius: 30px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(249, 252, 255, 0.68));
+            border: 1px solid rgba(255, 255, 255, 0.68);
+            box-shadow: 0 22px 44px rgba(150, 184, 210, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.84);
+            text-align: center;
+        }
+
+        .question-chip {
+            display: inline-block;
+            margin-bottom: 18px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(242, 249, 255, 0.92);
+            color: var(--accent);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .question-title {
+            margin: 0;
+            color: #617286;
+            font-size: 34px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .question-text {
+            margin: 16px auto 0;
+            color: #8ea0b5;
+            font-size: 18px;
+            line-height: 1.55;
+        }
+
+        .question-options {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 24px;
+        }
+
+        .question-option {
+            min-height: 98px;
+            padding: 18px 16px;
+            border: 0;
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.88);
+            color: #7690a8;
+            box-shadow: 0 16px 30px rgba(159, 188, 210, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.76);
+            cursor: pointer;
+        }
+
+        .question-option.is-selected {
+            background: linear-gradient(180deg, rgba(239, 249, 255, 0.98), rgba(222, 241, 255, 0.92));
+            color: #3d7bb7;
+            box-shadow: 0 22px 36px rgba(138, 187, 221, 0.22), inset 0 0 0 2px rgba(146, 209, 249, 0.96);
+        }
+
+        .question-option-title {
+            display: block;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .question-option-detail {
+            display: block;
+            margin-top: 6px;
+            font-size: 14px;
+            line-height: 1.4;
+            color: inherit;
+            opacity: 0.8;
         }
 
         .content-copy {
@@ -818,6 +1087,22 @@
             .landing-title { font-size: 44px; }
             .landing-enter { width: min(64vw, 226px); }
             .landing-enter-label { font-size: 26px; }
+            .selection-copy { top: 9%; width: min(90vw, 420px); }
+            .selection-copy h1 { font-size: 34px; }
+            .selection-copy p { max-width: 320px; font-size: 15px; }
+            .gender-grid { top: 17.5%; width: min(98vw, 470px); gap: 16px; }
+            .gender-card { min-height: 548px; padding: 16px 14px 14px; border-radius: 26px; }
+            .gender-art { height: 440px; border-radius: 22px; }
+            .gender-label { font-size: 20px; }
+            .gender-label-symbol { font-size: 40px; }
+            .question-panel { top: 26%; width: min(90vw, 394px); padding: 24px 20px 22px; border-radius: 26px; }
+            .question-title { font-size: 28px; }
+            .question-text { font-size: 15px; }
+            .question-option { min-height: 88px; padding: 16px 12px; border-radius: 18px; }
+            .question-option-title { font-size: 20px; }
+            .selection-actions { bottom: 7.8%; width: min(90vw, 360px); grid-template-columns: 52px 1fr 52px; gap: 14px; }
+            .nav-icon-button { width: 52px; height: 52px; font-size: 24px; }
+            .action-button { min-height: 66px; font-size: 20px; }
             .content-copy { top: 7%; }
             .content-copy h1 { font-size: 34px; }
             .content-copy p { max-width: 300px; font-size: 15px; }
@@ -840,6 +1125,20 @@
         }
 
         @media (max-height: 760px) {
+            .selection-copy { top: 7%; }
+            .selection-copy h1 { font-size: 30px; }
+            .selection-copy p { margin-top: 10px; font-size: 14px; }
+            .gender-grid { top: 16%; }
+            .gender-card { min-height: 438px; }
+            .gender-art { height: 334px; }
+            .gender-label { margin-top: 12px; padding: 14px 12px 12px; font-size: 18px; }
+            .selection-actions { bottom: 4.8%; }
+            .action-button { min-height: 60px; font-size: 18px; }
+            .question-panel { top: 22%; padding-top: 24px; padding-bottom: 22px; }
+            .question-title { font-size: 26px; }
+            .question-text { font-size: 14px; }
+            .question-options { margin-top: 18px; }
+            .question-option { min-height: 78px; }
             .content-copy { top: 6%; }
             .content-copy h1 { font-size: 30px; }
             .content-copy p { margin-top: 10px; font-size: 14px; }
@@ -878,6 +1177,81 @@
                     <span class="landing-enter-label">ENTER</span>
                     <span class="landing-enter-line"></span>
                 </button>
+            </div>
+        </section>
+
+        <section class="page">
+            <div class="page-shell" id="genderShell">
+                <div class="beam-left"></div>
+                <div class="beam-right"></div>
+                <div class="wave wave-main"></div>
+                <div class="wave wave-soft"></div>
+                <div class="wave wave-base"></div>
+                <div class="platform"></div>
+                <div class="selection-copy">
+                    <h1>Select Your Gender</h1>
+                    <p>Please choose your gender to begin the body scan.</p>
+                </div>
+                <div class="gender-grid">
+                    <button class="gender-card male" id="genderMaleButton" type="button" aria-label="Select male">
+                        <div class="gender-art">
+                            <img class="gender-figure" id="genderMaleImage" data-local-src="img/gender-male-person.png" alt="Male full body figure">
+                        </div>
+                        <div class="gender-label">
+                            <span class="gender-label-symbol">&#9794;</span>
+                            <span>Male</span>
+                        </div>
+                    </button>
+                    <button class="gender-card female" id="genderFemaleButton" type="button" aria-label="Select female">
+                        <div class="gender-art">
+                            <img class="gender-figure" id="genderFemaleImage" data-local-src="img/gender-female-person.png" alt="Female full body figure">
+                        </div>
+                        <div class="gender-label">
+                            <span class="gender-label-symbol">&#9792;</span>
+                            <span>Female</span>
+                        </div>
+                    </button>
+                </div>
+                <div class="selection-actions">
+                    <button class="nav-icon-button" id="genderBackButton" type="button" aria-label="Back to landing">&#8592;</button>
+                    <button class="action-button" id="genderContinueButton" type="button" disabled>Continue</button>
+                    <button class="nav-icon-button" id="genderHomeButton" type="button" aria-label="Go to home">&#8962;</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="page">
+            <div class="page-shell" id="questionShell">
+                <div class="beam-left"></div>
+                <div class="beam-right"></div>
+                <div class="wave wave-main"></div>
+                <div class="wave wave-soft"></div>
+                <div class="wave wave-base"></div>
+                <div class="platform"></div>
+                <div class="selection-copy">
+                    <h1>Quick Question</h1>
+                    <p>Please answer one short question before the facial scan begins.</p>
+                </div>
+                <div class="question-panel">
+                    <div class="question-chip">Question 01</div>
+                    <h2 class="question-title">Are you wearing glasses right now?</h2>
+                    <p class="question-text">Choose the option that best matches your current condition before the face analysis starts.</p>
+                    <div class="question-options">
+                        <button class="question-option" id="questionYesButton" type="button">
+                            <span class="question-option-title">Yes</span>
+                            <span class="question-option-detail">I am wearing glasses.</span>
+                        </button>
+                        <button class="question-option" id="questionNoButton" type="button">
+                            <span class="question-option-title">No</span>
+                            <span class="question-option-detail">My face is fully visible.</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="selection-actions">
+                    <button class="nav-icon-button" id="questionBackButton" type="button" aria-label="Back to gender selection">&#8592;</button>
+                    <button class="action-button" id="questionContinueButton" type="button" disabled>Continue</button>
+                    <button class="nav-icon-button" id="questionHomeButton" type="button" aria-label="Go to home">&#8962;</button>
+                </div>
             </div>
         </section>
 
@@ -1009,14 +1383,27 @@
     const params = new URLSearchParams(window.location.search);
     const bootstrapConfig = window.__VIEWER_CONFIG__ || {};
     const initialServerUrl = bootstrapConfig.serverUrl || params.get("serverUrl");
+    const assetBaseUrl = bootstrapConfig.assetBaseUrl || "";
     const originServerUrl = window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
     const serverUrl = (initialServerUrl || originServerUrl || "").replace(/\/+$/, "");
     const requestedTracks = Math.max(1, Number(bootstrapConfig.tracks || params.get("tracks") || 1));
 
-    const PAGE_INDEX = { landing: 0, face: 1, body: 2 };
+    const PAGE_INDEX = { landing: 0, gender: 1, question: 2, face: 3, body: 4 };
 
     const pageTrack = document.getElementById("pageTrack");
     const enterButton = document.getElementById("enterButton");
+    const genderMaleImage = document.getElementById("genderMaleImage");
+    const genderFemaleImage = document.getElementById("genderFemaleImage");
+    const genderMaleButton = document.getElementById("genderMaleButton");
+    const genderFemaleButton = document.getElementById("genderFemaleButton");
+    const genderContinueButton = document.getElementById("genderContinueButton");
+    const genderBackButton = document.getElementById("genderBackButton");
+    const genderHomeButton = document.getElementById("genderHomeButton");
+    const questionYesButton = document.getElementById("questionYesButton");
+    const questionNoButton = document.getElementById("questionNoButton");
+    const questionContinueButton = document.getElementById("questionContinueButton");
+    const questionBackButton = document.getElementById("questionBackButton");
+    const questionHomeButton = document.getElementById("questionHomeButton");
     const faceShell = document.getElementById("faceShell");
     const faceInfoButton = document.getElementById("faceInfoButton");
     const faceNextButton = document.getElementById("faceNextButton");
@@ -1061,11 +1448,89 @@
         fallbackActive: false,
         entered: false,
         detailsMuted: false,
+        selectedGender: "",
+        questionAnswer: "",
         videoReady: false,
         currentPage: "landing"
     };
 
     const PAGE_TRANSITION_DELAY_MS = 110;
+
+    function resolveAssetUrl(path) {
+        const normalizedPath = String(path || "").replace(/^\/+/, "");
+        if (!normalizedPath) {
+            return "";
+        }
+        if (!assetBaseUrl) {
+            return normalizedPath;
+        }
+        return `${assetBaseUrl}${normalizedPath}`;
+    }
+
+    function leaveStreamingPages(targetPage) {
+        clearReconnectTimer();
+        clearBodyRetryTimer();
+        window.setTimeout(async () => {
+            if (state.currentPage !== targetPage || state.disposed) {
+                return;
+            }
+            stopBodyStream();
+            await disconnect({ preserveFallback: false });
+        }, PAGE_TRANSITION_DELAY_MS);
+    }
+
+    function syncGenderSelection() {
+        const isMale = state.selectedGender === "male";
+        const isFemale = state.selectedGender === "female";
+        genderMaleButton.classList.toggle("is-selected", isMale);
+        genderFemaleButton.classList.toggle("is-selected", isFemale);
+        genderMaleButton.setAttribute("aria-pressed", isMale ? "true" : "false");
+        genderFemaleButton.setAttribute("aria-pressed", isFemale ? "true" : "false");
+        genderContinueButton.disabled = !state.selectedGender;
+    }
+
+    function syncQuestionSelection() {
+        const isYes = state.questionAnswer === "yes";
+        const isNo = state.questionAnswer === "no";
+        questionYesButton.classList.toggle("is-selected", isYes);
+        questionNoButton.classList.toggle("is-selected", isNo);
+        questionYesButton.setAttribute("aria-pressed", isYes ? "true" : "false");
+        questionNoButton.setAttribute("aria-pressed", isNo ? "true" : "false");
+        questionContinueButton.disabled = !state.questionAnswer;
+    }
+
+    function selectGender(gender) {
+        state.selectedGender = gender;
+        syncGenderSelection();
+    }
+
+    function selectQuestionAnswer(answer) {
+        state.questionAnswer = answer;
+        syncQuestionSelection();
+    }
+
+    async function goToLandingPage() {
+        state.entered = false;
+        setCurrentPage("landing");
+        leaveStreamingPages("landing");
+    }
+
+    async function goToGenderPage() {
+        state.entered = false;
+        setCurrentPage("gender");
+        syncGenderSelection();
+        leaveStreamingPages("gender");
+    }
+
+    async function goToQuestionPage() {
+        if (!state.selectedGender) {
+            return;
+        }
+        state.entered = false;
+        setCurrentPage("question");
+        syncQuestionSelection();
+        leaveStreamingPages("question");
+    }
 
     async function goToFacePage() {
         state.entered = true;
@@ -1140,6 +1605,16 @@
         state.detailsMuted = !state.detailsMuted;
         faceShell.classList.toggle("quiet", state.detailsMuted);
     });
+    genderMaleButton.addEventListener("click", () => selectGender("male"));
+    genderFemaleButton.addEventListener("click", () => selectGender("female"));
+    genderContinueButton.addEventListener("click", () => goToQuestionPage().catch((error) => postError(`Gender page open failed: ${error.message}`)));
+    genderBackButton.addEventListener("click", () => goToLandingPage().catch((error) => postError(`Landing page open failed: ${error.message}`)));
+    genderHomeButton.addEventListener("click", () => goToLandingPage().catch((error) => postError(`Landing page open failed: ${error.message}`)));
+    questionYesButton.addEventListener("click", () => selectQuestionAnswer("yes"));
+    questionNoButton.addEventListener("click", () => selectQuestionAnswer("no"));
+    questionContinueButton.addEventListener("click", () => goToFacePage().catch((error) => postError(`Face page open failed: ${error.message}`)));
+    questionBackButton.addEventListener("click", () => goToGenderPage().catch((error) => postError(`Gender page open failed: ${error.message}`)));
+    questionHomeButton.addEventListener("click", () => goToLandingPage().catch((error) => postError(`Landing page open failed: ${error.message}`)));
     faceNextButton.addEventListener("click", () => goToBodyPage().catch((error) => postBodyError(`Body page open failed: ${error.message}`)));
     faceRefreshButton.addEventListener("click", () => {
         clearReconnectTimer();
@@ -1153,12 +1628,16 @@
     bodyBackButton.addEventListener("click", () => goToFacePage().catch((error) => postError(`Face page open failed: ${error.message}`)));
     bodyRefreshButton.addEventListener("click", () => startBodyStream(true));
     bodyRetryButton.addEventListener("click", () => startBodyStream(true));
-    enterButton.addEventListener("click", () => goToFacePage().catch((error) => postError(`Initial connect failed: ${error.message}`)));
+    enterButton.addEventListener("click", () => goToGenderPage().catch((error) => postError(`Gender page open failed: ${error.message}`)));
     window.addEventListener("resize", () => {
         updateTrackPosition(true);
         updateDisplayInfo();
     });
 
+    genderMaleImage.src = resolveAssetUrl(genderMaleImage.dataset.localSrc);
+    genderFemaleImage.src = resolveAssetUrl(genderFemaleImage.dataset.localSrc);
+    syncGenderSelection();
+    syncQuestionSelection();
     updateDisplayInfo();
     setStageMode("idle", "Waiting for stream");
     setBodyStageMode("idle", "Waiting for skeleton");

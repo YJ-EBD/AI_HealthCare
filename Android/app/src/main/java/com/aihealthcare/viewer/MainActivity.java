@@ -192,7 +192,7 @@ public class MainActivity extends Activity {
             String viewerHtml = readViewerHtmlTemplate();
             String bootstrapScript = String.format(
                     Locale.US,
-                    "<script>window.__VIEWER_CONFIG__={serverUrl:'%s',tracks:%d};</script>",
+                    "<script>window.__VIEWER_CONFIG__={serverUrl:'%s',tracks:%d,assetBaseUrl:'file:///android_asset/'};</script>",
                     escapeForJavaScript(serverUrl),
                     REQUESTED_TRACKS
             );
