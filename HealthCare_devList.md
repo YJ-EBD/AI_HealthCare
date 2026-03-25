@@ -1,5 +1,12 @@
 # HealthCare Dev List
 
+## 2026-03-25
+
+- Added the new `cardiovascular_autonomic_domain/` workspace for section `1.1 ~ 1.7` of the cardiovascular and autonomic measurement flow.
+- Implemented the PSL-iPPG2C Arduino UNO R4 sketch, serial capture pipeline, signal-processing logic, sequential analysis runner, and the unified root entrypoint `run_cardiovascular_measurement.py`.
+- Organized the Python execution flow around the project `.venv` and recorded the installed runtime tools in `cardiovascular_autonomic_domain/List.txt`.
+- Verified the new workflow with synthetic PPG smoke tests and prepared the direct serial-run path for the connected Arduino board.
+
 ## 2026-03-24
 
 이번 채팅에서 진행한 주요 개발 내역입니다.
