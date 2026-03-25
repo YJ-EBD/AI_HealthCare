@@ -1,34 +1,79 @@
-# HealthCare Dev List
+# HealthCare 개발 내역
 
 ## 2026-03-25
 
-- Added the new `cardiovascular_autonomic_domain/` workspace for section `1.1 ~ 1.7` of the cardiovascular and autonomic measurement flow.
-- Implemented the PSL-iPPG2C Arduino UNO R4 sketch, serial capture pipeline, signal-processing logic, sequential analysis runner, and the unified root entrypoint `run_cardiovascular_measurement.py`.
-- Organized the Python execution flow around the project `.venv` and recorded the installed runtime tools in `cardiovascular_autonomic_domain/List.txt`.
-- Verified the new workflow with synthetic PPG smoke tests and prepared the direct serial-run path for the connected Arduino board.
+1. 심혈관·자율신경 측정 워크스페이스 구현
+설명: `cardiovascular_autonomic_domain/` 디렉토리를 새로 만들고, 문서의 `1.1 ~ 1.7` 항목을 구현하기 위한 전용 작업 공간을 구성했습니다.
+
+2. PSL-iPPG2C 신호 수집 및 분석 파이프라인 구현
+설명: Arduino UNO R4용 PSL-iPPG2C 스케치, 시리얼 수집 코드, PPG 신호 필터링, 피크 검출, HR/HRV/스트레스/혈류/혈관 건강/혈관 나이/혈압 추정 로직을 구현했습니다.
+
+3. 순차 측정 통합 실행 기능 구현
+설명: `1.1 -> 1.2 -> 1.3 -> 1.4 -> 1.5 -> 1.6 -> 1.7` 순서로 계산을 진행한 뒤, 마지막에 결과를 한 번에 출력하는 통합 실행 흐름을 만들었습니다.
+
+4. 루트 실행 진입점 구현
+설명: 루트 경로에서 바로 실행할 수 있도록 `run_cardiovascular_measurement.py`를 추가했고, 시리얼 포트 선택, 측정 진행, 최종 결과 출력까지 한 파일에서 처리하도록 구성했습니다.
+
+5. Python 가상환경 기준 실행 구조 정리
+설명: 프로젝트 루트에 `.venv`를 만들고, 실행 시 `.venv`의 Python을 기준으로 동작하도록 정리했습니다. 설치한 패키지와 도구 목록은 `cardiovascular_autonomic_domain/List.txt`에 기록했습니다.
+
+6. 측정 검증 및 문서화 작업
+설명: 합성 PPG 데이터로 스모크 테스트를 진행해 결과 흐름을 검증했고, 사용 방법과 실행 예시는 `cardiovascular_autonomic_domain/README.md`에 정리했습니다.
 
 ## 2026-03-24
 
-이번 채팅에서 진행한 주요 개발 내역입니다.
+1. 안드로이드 키오스크 UI 흐름 정리
+설명: `Android/` 앱을 기준으로 전체 화면 키오스크 흐름을 정리하고, 사용자 진행 순서를 명확하게 보이도록 구조를 재구성했습니다.
 
-- `Android/` 안드로이드 앱을 기준으로 전체 화면 키오스크 UI 흐름을 정리했습니다.
-- 앱 페이지 흐름을 `대기 화면 -> 성별 선택 -> 질의응답 -> 얼굴 스캔 -> 전신 스캔` 구조로 확장했습니다.
-- 페이지 전환에 가로 슬라이드 애니메이션을 적용하고, 각 화면의 중앙 정렬과 1080x1920 세로 해상도 기준 배치를 보정했습니다.
-- 얼굴 페이지는 얼굴 가이드 프레임, 자동 서버 연결, 카메라 준비 상태 표시가 동작하도록 정리했습니다.
-- 전신 페이지는 `old/BodyCheck.py`의 전신 스켈레톤 표시 흐름을 참고해 전신 카메라와 스켈레톤 오버레이가 나오도록 연결했습니다.
-- 전신 페이지의 카드, 안내 문구, 버튼, 상태 요소가 겹치지 않도록 레이아웃을 반복 보정했습니다.
-- `BackEnd/`는 FastAPI 기준으로 유지하고, 기존 불필요한 Next 잔여물과 불필요한 백엔드 파일을 정리했습니다.
-- FastAPI 서버는 얼굴/전신 스트림, 상태 확인, HTTP fallback 경로가 동작하도록 유지했습니다.
-- 성별 선택 페이지를 참고 시안과 같은 톤으로 재구성하고, 남성/여성 카드 크기와 이미지 배치를 크게 조정했습니다.
-- 성별 선택 페이지에는 사용자 제작 이미지를 포함할 수 있도록 `assets/img` 기반 자산 연결 구조를 정리했습니다.
-- `MainActivity.java`에서 `file:///android_asset/` 기준 자산 경로를 주입하도록 수정해 WebView에서도 로컬 이미지가 안정적으로 보이게 했습니다.
-- 성별 페이지 인물 PNG 자산을 교체하고, 최신 APK가 다시 생성되도록 여러 차례 재빌드했습니다.
-- 안드로이드 앱은 Android 7.1.2 기준 immersive full screen 환경으로 동작하도록 유지했습니다.
+2. 앱 페이지 흐름 확장 구현
+설명: 앱 흐름을 `대기 화면 -> 성별 선택 -> 질의응답 -> 얼굴 스캔 -> 전신 스캔` 구조로 확장했습니다.
+
+3. 화면 전환 애니메이션 및 레이아웃 보정 구현
+설명: 가로 슬라이드 전환 애니메이션을 적용하고, 1080x1920 세로 해상도 기준으로 중앙 정렬과 화면 배치를 보정했습니다.
+
+4. 얼굴 스캔 화면 기능 정리
+설명: 얼굴 가이드 프레임, 자동 서버 연결, 카메라 준비 상태 표시가 동작하도록 얼굴 페이지를 정리했습니다.
+
+5. 전신 스캔 화면 연동 구현
+설명: `old/BodyCheck.py`의 전신 스켈레톤 표시 흐름을 참고해 전신 카메라와 스켈레톤 오버레이가 나오도록 연결했습니다.
+
+6. 전신 페이지 레이아웃 안정화 작업
+설명: 카드, 안내 문구, 버튼, 상태 요소가 겹치지 않도록 전신 페이지 레이아웃을 반복 보정했습니다.
+
+7. 백엔드 구조 정리
+설명: `BackEnd/`는 FastAPI 기준으로 유지하고, 기존 불필요한 Next 잔여물과 불필요한 백엔드 파일을 정리했습니다.
+
+8. 얼굴/전신 스트림 및 상태 확인 기능 유지
+설명: FastAPI 서버에서 얼굴 스트림, 전신 스트림, 상태 확인, HTTP fallback 경로가 계속 동작하도록 정리했습니다.
+
+9. 성별 선택 페이지 디자인 재구성
+설명: 참고 시안과 비슷한 톤으로 성별 선택 페이지를 재구성하고, 남성/여성 카드 크기와 이미지 배치를 크게 조정했습니다.
+
+10. 이미지 자산 연결 구조 정리
+설명: 성별 선택 페이지에 사용자 제작 이미지를 포함할 수 있도록 `assets/img` 기반 자산 연결 구조를 정리했습니다.
+
+11. WebView 로컬 자산 표시 수정
+설명: `MainActivity.java`에서 `file:///android_asset/` 기준 자산 경로를 주입하도록 수정해 WebView에서도 로컬 이미지가 안정적으로 보이도록 했습니다.
+
+12. 성별 페이지 이미지 자산 교체 및 재빌드
+설명: 성별 페이지 인물 PNG 자산을 교체하고, 최신 APK가 다시 생성되도록 여러 차례 재빌드했습니다.
+
+13. Android 7.1.2 전체화면 동작 유지
+설명: 안드로이드 앱이 Android 7.1.2 기준 immersive full screen 환경에서 동작하도록 유지했습니다.
 
 ## 현재 기준 정리
 
-- 안드로이드 앱 경로: `Android/`
-- 백엔드 경로: `BackEnd/`
-- 성별 선택 이미지 자산 경로: `Android/app/src/main/assets/img/`
-- 최신 APK 출력 경로: `Android/app/build/outputs/apk/debug/app-debug.apk`
-- 기본 서버 포트: `8080`
+1. 안드로이드 앱 경로 정리
+설명: 안드로이드 앱 작업 경로는 `Android/`입니다.
+
+2. 백엔드 경로 정리
+설명: 백엔드 작업 경로는 `BackEnd/`입니다.
+
+3. 성별 선택 이미지 자산 경로 정리
+설명: 이미지 자산 경로는 `Android/app/src/main/assets/img/`입니다.
+
+4. 최신 APK 출력 경로 정리
+설명: APK 출력 경로는 `Android/app/build/outputs/apk/debug/app-debug.apk`입니다.
+
+5. 기본 서버 포트 정리
+설명: 기본 서버 포트는 `8080`입니다.
