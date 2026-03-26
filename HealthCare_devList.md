@@ -2,20 +2,22 @@
 
 ## 2026-03-26
 
-### Face_AI 개발 내역
-- AI Hub `한국인 피부상태 측정 데이터` 페이지와 로컬 `Face_AI/reference/한국인 피부상태 측정 데이터` 전수조사를 진행하고 데이터 규모를 공식 수치와 비교했습니다.
-- 로컬 보유율을 정리했습니다: 이미지 `90.02%`, 라벨 `90.02%`, 피실험자 `90.02%`, 측정 데이터 `100%`, 메타데이터 `100%`.
-- 전수조사 결과와 성능 분석 문서를 작성했습니다: `ANALYSIS_REPORT.md`, `IMPROVEMENT_PLAN.md`, `성능체크리스트.md`.
-- 공식 수치 비교용 manifest와 검증 스크립트를 추가했습니다: `official_expected_manifest.json`, `executable/verify_official_equivalence.py`.
-- `Face_AI/run.py` 올인원 실행 엔트리포인트를 만들고 자산 준비 후 실행되도록 정리했습니다.
-- `PySide6` 기반 실시간 웹캠 UI를 추가했습니다: `live_ui.py`, `live_runtime.py`.
-- UI 기본 해상도를 `900x1440` 세로 레이아웃으로 맞추고, 한글 오버레이가 `????`로 깨지지 않도록 `Pillow` 폰트 렌더링으로 수정했습니다.
-- Validation 분류 평가 실행 스크립트와 런타임 평가 코드를 정리했습니다.
-- 공개 체크포인트 성능을 점검했고, 원모델 평균 metric accuracy `0.760872` 및 다수 클래스 baseline 대비 약점을 확인했습니다.
-- reference 분포 기반 hybrid calibration을 적용해 실사용 보정 경로를 추가했습니다. 200샘플 기준 평균 성능이 `0.779411 -> 0.816882`로 개선됐습니다.
-- 항목별 추가 수집 목표를 산정했습니다: wrinkle `8,790`, sagging `3,343`, pore `4,912`, pigmentation `5,397`, dryness `1,041`.
-
-### Git 정리 원칙
-- `Face_AI/reference/`는 GitHub 업로드에서 영구 제외합니다.
-- 대용량 데이터 및 생성물(`data`, `inspection`, `model/checkpoint`, `executable/output`, `__pycache__`)은 source control 안정성을 위해 제외합니다.
-- 코드, 문서, 실행 스크립트 중심으로만 추적합니다.
+1. AI Hub `한국인 피부상태 측정 데이터` 페이지와 로컬 `Face_AI/reference/한국인 피부상태 측정 데이터` 전체 자료를 대조 분석했습니다.
+2. 원본 대비 데이터 충족도를 확인했습니다: 이미지 `90.02%`, 라벨 `90.02%`, 피실험자 `90.02%`, 측정 데이터 `100%`, 메타데이터 `100%`.
+3. `zip`, `egg`, `hwp`, `pdf`, `docx`, `csv`, `json` 자료를 직접 열어 구조와 산출물을 전수 조사했습니다.
+4. 공식 수치 비교용 기준 파일과 검증 스크립트를 추가했습니다: `Face_AI/official_expected_manifest.json`, `Face_AI/executable/verify_official_equivalence.py`.
+5. `Face_AI/run.py` 올인원 실행 파일을 만들어 자산 준비와 실행을 한 번에 처리할 수 있게 정리했습니다.
+6. OpenCV 기반 얼굴 감지와 부위 추론 파이프라인을 정리해 실시간 분석 흐름을 연결했습니다.
+7. `PySide6` 기반 세로형 실시간 UI를 개발했습니다.
+8. UI 기본 해상도를 `900x1440`으로 맞추고, 실시간 웹캠 화면에서 얼굴 박스와 부위별 결과가 보이도록 구성했습니다.
+9. 한글 오버레이가 `????`로 깨지는 문제를 `Pillow` 폰트 렌더링 방식으로 수정했습니다.
+10. Validation 분류 평가 스크립트와 런타임 평가 코드를 정리했습니다.
+11. 공개 체크포인트 성능을 점검했고, 원모델 평균 metric accuracy `0.760872`를 확인했습니다.
+12. 다수 클래스 baseline과 비교해 항목별 약점을 확인했고, 특히 `wrinkle` 계열이 취약함을 정리했습니다.
+13. reference 분포 기반 hybrid calibration을 추가해 실사용 보정 경로를 만들었습니다.
+14. hybrid 보정 적용 시 200샘플 기준 평균 성능이 `0.779411 -> 0.816882`로 개선되는 것을 확인했습니다.
+15. 추가 수집 우선순위를 산정했습니다: `wrinkle 8,790`, `sagging 3,343`, `pore 4,912`, `pigmentation 5,397`, `dryness 1,041`.
+16. 분석 및 운영 문서를 작성했습니다: `Face_AI/ANALYSIS_REPORT.md`, `Face_AI/IMPROVEMENT_PLAN.md`, `Face_AI/성능체크리스트.md`, `Face_AI/README.md`.
+17. Git 정리 원칙을 반영했습니다: `Face_AI/reference/`는 GitHub 업로드에서 영구 제외합니다.
+18. source control 안정성을 위해 `Face_AI/data/`, `Face_AI/inspection/`, `Face_AI/model/checkpoint/`, `Face_AI/executable/output/`, `__pycache__/`도 제외 처리했습니다.
+19. 코드, 문서, 실행 스크립트만 추적하도록 정리해 다른 디렉토리에 지장 없이 커밋 가능한 구조로 맞췄습니다.
