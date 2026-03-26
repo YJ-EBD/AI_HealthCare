@@ -12,7 +12,7 @@ import cv2
 import serial
 
 from capture_and_analyze import parse_arduino_line, write_capture_csv
-from diagnostics import log_event, log_exception
+from runtime_support import log_event, log_exception
 
 
 StatusCallback = Callable[[str], None] | None

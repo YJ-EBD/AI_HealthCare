@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="surface">#F4F7FB</color>
-    <color name="panel">#FFFFFF</color>
-    <color name="text_primary">#162032</color>
-    <color name="text_secondary">#4E5D78</color>
-    <color name="text_hint">#7F8CA3</color>
-</resources>

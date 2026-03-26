@@ -35,8 +35,7 @@ from cardiovascular_metrics import (
     extract_pulse_features,
     find_onsets,
 )
-from ml_inference import build_feature_payload, run_ml_inference
-from oss_signal_adapters import analyze_contact_ppg_with_oss
+from intelligence_support import analyze_contact_ppg_with_oss, build_feature_payload, run_ml_inference
 
 
 def translate_stress_state(value: str) -> str:

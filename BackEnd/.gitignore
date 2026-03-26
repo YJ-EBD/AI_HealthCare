@@ -1,8 +1,0 @@
-__pycache__/
-*.pyc
-*.pyo
-*.log
-*.pid
-.env
-.env.local
-worker/__pycache__/

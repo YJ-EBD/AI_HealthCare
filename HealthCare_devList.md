@@ -35,6 +35,12 @@
 11. 외부 오픈소스 신호 엔진 실제 연동
 설명: `oss_signal_adapters.py`를 추가하고 `requirements.txt`, `camera_rppg_features.py`, `sequential_measurement_session.py`, `README.md`를 갱신해 `NeuroKit2`와 `pyPPG`를 실제 분석 경로에 연결했습니다. 접촉식 PPG는 HR/HRV/SQI/바이오마커 보강, 카메라 rPPG는 NeuroKit2 기반 HR/품질 보강이 가능하도록 정리했습니다.
 
+12. cardiovascular_autonomic_domain 내부 기능별 코드 통합 정리
+설명: `healthcare_app.py`, `cli_tools.py`, `runtime_support.py`, `intelligence_support.py`를 추가해 실행 엔트리포인트, CLI 도구, 런타임 지원, ML·오픈소스 엔진 지원을 `cardiovascular_autonomic_domain/` 내부 기능 단위로 모으고, 루트 실행 파일은 얇은 호환 래퍼로 정리했습니다.
+
+13. 레거시 Android / BackEnd 디렉토리 제거
+설명: 더 이상 사용하지 않는 `Android/`, `BackEnd/` 디렉토리를 워크스페이스와 소스컨트롤에서 제거해 현재 프로젝트 구조를 `cardiovascular_autonomic_domain` 중심으로 단순화했습니다.
+
 ## 2026-03-25
 
 1. 심혈관·자율신경 측정 워크스페이스 구현

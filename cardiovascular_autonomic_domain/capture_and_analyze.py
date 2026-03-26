@@ -13,7 +13,7 @@ import numpy as np
 import serial
 
 from cardiovascular_metrics import SignalDataset, UserProfile, analyze_dataset, estimate_sample_rate
-from diagnostics import log_event, log_exception
+from runtime_support import log_event, log_exception
 
 
 def parse_float(value: str | None) -> float | None:

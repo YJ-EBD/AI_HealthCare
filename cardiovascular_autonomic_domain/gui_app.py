@@ -11,7 +11,7 @@ from typing import Any
 import cv2
 from serial.tools import list_ports
 
-from diagnostics import LOG_PATH, configure_logging, log_event, log_exception
+from runtime_support import LOG_PATH, ProductStore, configure_logging, log_event, log_exception
 from capture_and_analyze import (
     build_user_profile,
     capture_serial_session,
@@ -21,7 +21,6 @@ from capture_and_analyze import (
 )
 from camera_rppg_features import extract_camera_rppg_features
 from multimodal_capture import capture_multimodal_session, open_camera_capture, probe_camera_indices
-from product_store import ProductStore
 from sequential_measurement_session import format_console_summary, load_camera_summary, run_stepwise_analysis
 
 try:

@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from cardiovascular_metrics import bandpass_filter, detect_systolic_peaks, estimate_sample_rate
-from oss_signal_adapters import analyze_rppg_signal_with_oss
+from intelligence_support import analyze_rppg_signal_with_oss
 
 
 EPSILON = 1e-9

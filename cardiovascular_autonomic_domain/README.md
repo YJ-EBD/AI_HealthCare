@@ -12,6 +12,10 @@ Implemented outputs:
 - 1.7 Blood pressure estimate and trend
 
 Files:
+- `healthcare_app.py`
+- `cli_tools.py`
+- `runtime_support.py`
+- `intelligence_support.py`
 - `arduino/psl_iPPG2C_cardiovascular_autonomic/psl_iPPG2C_cardiovascular_autonomic.ino`
 - `arduino/psl_iPPG2C_esp32_dwkit_v4/psl_iPPG2C_esp32_dwkit_v4.ino`
 - `arduino/psl_iPPG2C_esp32_dwkit_v4/WIRING.md`
@@ -116,6 +120,7 @@ Smoke test without hardware:
 ```
 
 Notes:
+- The implementation code is now consolidated by function inside this directory: `healthcare_app.py` for UI launch, `cli_tools.py` for CLI entrypoints, `runtime_support.py` for logging/profile/history storage, and `intelligence_support.py` for ML plus OSS signal-engine support.
 - The optional left-right channel delta term from section 1.4 is supported only if a second synchronized PPG channel is added to the CSV as `aux` or `ppg_aux_raw`.
 - The blood pressure output is calibration-aware. Without cuff calibration it should be treated as a trend estimate, not a diagnostic reading.
 - Vascular age is a research-style regression estimate anchored to the provided age and signal features.
