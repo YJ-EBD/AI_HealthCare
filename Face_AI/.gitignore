@@ -1,0 +1,7 @@
+reference/
+data/
+inspection/
+model/checkpoint/
+executable/output/
+__pycache__/
+**/__pycache__/

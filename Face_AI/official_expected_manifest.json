@@ -1,0 +1,23 @@
+{
+  "source": "https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&dataSetSn=71645",
+  "checked_at": "2026-03-26",
+  "dataset_name": "한국인 피부상태 측정 데이터",
+  "expected_counts": {
+    "face_images_total": 13936,
+    "measurement_records_total": 84688,
+    "label_records_total": 125424,
+    "metadata_records_total": 6432,
+    "subjects_total_inferred": 1072
+  },
+  "expected_layout": {
+    "images_per_subject": 13,
+    "labels_per_image": 9,
+    "measurement_fields_per_subject": 79,
+    "metadata_fields_per_subject": 6
+  },
+  "notes": [
+    "AI Hub page explicitly warns that sample/lightweight data may differ from the original dataset.",
+    "The current local reference package appears smaller than the official page totals for images and labels.",
+    "The official download endpoint redirected to login during verification, so missing files could not be fetched anonymously."
+  ]
+}
