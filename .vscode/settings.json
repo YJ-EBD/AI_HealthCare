@@ -1,0 +1,19 @@
+{
+  "explorer.excludeGitIgnore": true,
+  "files.exclude": {
+    "**/__pycache__": true,
+    "Face_AI/reference": true,
+    "Face_AI/data": true,
+    "Face_AI/inspection": true,
+    "Face_AI/model/checkpoint": true,
+    "Face_AI/executable/output": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    "Face_AI/reference": true,
+    "Face_AI/data": true,
+    "Face_AI/inspection": true,
+    "Face_AI/model/checkpoint": true,
+    "Face_AI/executable/output": true
+  }
+}
