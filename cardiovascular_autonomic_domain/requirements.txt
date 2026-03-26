@@ -2,3 +2,9 @@ numpy
 pyserial
 PySide6
 opencv-python
+scikit-learn
+joblib
+neurokit2
+pyPPG
+pyvhr-cpu
+dotmap

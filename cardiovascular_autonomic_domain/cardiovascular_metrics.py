@@ -328,7 +328,7 @@ def calculate_hrv_metrics(peak_indices: np.ndarray, sample_rate_hz: float) -> di
             "pnn50": 0.0,
             "hrv_score": 0.0,
             "autonomic_balance_index": 0.0,
-            "autonomic_balance_state": "insufficient_data",
+            "autonomic_balance_state": "데이터 부족",
         }
 
     rr_intervals_ms = np.diff(peak_indices) / sample_rate_hz * 1000.0
@@ -346,11 +346,11 @@ def calculate_hrv_metrics(peak_indices: np.ndarray, sample_rate_hz: float) -> di
     parasympathetic_ratio = rmssd_ms / max(heart_rate_bpm, 1.0)
     autonomic_balance_index = clamp(50.0 + (parasympathetic_ratio - 0.45) * 120.0, 0.0, 100.0)
     if autonomic_balance_index < 40.0:
-        autonomic_balance_state = "sympathetic_dominant"
+        autonomic_balance_state = "교감신경 우세"
     elif autonomic_balance_index <= 60.0:
-        autonomic_balance_state = "balanced"
+        autonomic_balance_state = "균형"
     else:
-        autonomic_balance_state = "parasympathetic_dominant"
+        autonomic_balance_state = "부교감신경 우세"
 
     return {
         "sdnn_ms": float(sdnn_ms),
@@ -383,11 +383,11 @@ def calculate_stress_metrics(heart_rate_bpm: float, hrv_metrics: dict[str, float
     )
 
     if stress_score < 33.0:
-        stress_state = "stable"
+        stress_state = "안정"
     elif stress_score < 66.0:
-        stress_state = "normal"
+        stress_state = "보통"
     else:
-        stress_state = "tense"
+        stress_state = "긴장"
 
     return {
         "stress_score": float(clamp(stress_score, 0.0, 100.0)),
@@ -582,11 +582,11 @@ def calculate_blood_pressure_metrics(
     estimated_dbp = clamp(base_dbp + delta_dbp, 50.0, 120.0)
 
     if delta_sbp > 5.0 or delta_dbp > 4.0:
-        trend = "rising"
+        trend = "상승 추세"
     elif delta_sbp < -5.0 or delta_dbp < -4.0:
-        trend = "falling"
+        trend = "하강 추세"
     else:
-        trend = "stable"
+        trend = "안정 추세"
 
     return {
         "estimated_sbp": float(estimated_sbp),
@@ -602,7 +602,7 @@ def analyze_dataset(dataset: SignalDataset, user_profile: UserProfile | None = N
 
     sample_rate_hz = dataset.sample_rate_hz or estimate_sample_rate(dataset.timestamps_s)
     if sample_rate_hz <= 0.0:
-        raise ValueError("Unable to determine sample rate from the dataset.")
+        raise ValueError("데이터셋에서 샘플링 주파수를 계산하지 못했습니다.")
 
     warnings: list[str] = []
     raw_ppg = np.asarray(dataset.ppg, dtype=float)
@@ -616,10 +616,10 @@ def analyze_dataset(dataset: SignalDataset, user_profile: UserProfile | None = N
         if fallback_peaks.size >= 3:
             peak_indices = fallback_peaks
             beat_source = "beat_channel_fallback"
-            warnings.append("PPG peak detection was weak, so the beat channel was used as a fallback.")
+            warnings.append("PPG 피크 검출이 약해 보조 비트 채널을 대신 사용했습니다.")
 
     if peak_indices.size < 3:
-        raise ValueError("Not enough beats were detected to calculate HRV and vascular features.")
+        raise ValueError("HRV와 혈관 지표를 계산하기에 충분한 박동을 검출하지 못했습니다.")
 
     onset_indices = find_onsets(filtered_ppg, peak_indices, sample_rate_hz)
     pulse_features = extract_pulse_features(filtered_ppg, peak_indices, onset_indices, sample_rate_hz)
@@ -648,16 +648,16 @@ def analyze_dataset(dataset: SignalDataset, user_profile: UserProfile | None = N
     )
 
     if not circulation_metrics["aux_channel_available"]:
-        warnings.append("The optional left-right channel delta term is unavailable on the current single-PPG hardware.")
+        warnings.append("현재 단일 PPG 하드웨어에서는 좌우 채널 차이 항목을 계산할 수 없습니다.")
     if not blood_pressure_metrics["calibrated"]:
-        warnings.append("Blood pressure output is trend-oriented because no personal cuff calibration was provided.")
+        warnings.append("개인 커프 보정값이 없어 혈압 결과는 추세 중심 참고값입니다.")
     if user_profile.age is None:
-        warnings.append("Vascular age used the default chronological age reference of 45 because no age was supplied.")
+        warnings.append("나이가 입력되지 않아 혈관 나이는 기본 기준 나이 45세를 사용했습니다.")
 
     duration_s = float(dataset.timestamps_s[-1] - dataset.timestamps_s[0]) if dataset.timestamps_s.size >= 2 else 0.0
     signal_quality_score = calculate_signal_quality(raw_ppg, filtered_ppg)
     if signal_quality_score < 35.0:
-        warnings.append("Signal quality is low. Re-seat the sensor and reduce finger motion for better results.")
+        warnings.append("신호 품질이 낮습니다. 센서를 다시 밀착하고 손가락 움직임을 줄여주세요.")
 
     return {
         "metadata": {

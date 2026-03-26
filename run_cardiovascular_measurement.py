@@ -35,7 +35,7 @@ from capture_and_analyze import (
     write_capture_csv,
     write_report_files,
 )
-from sequential_measurement_session import format_console_summary, print_progress, run_stepwise_analysis
+from sequential_measurement_session import format_console_summary, load_camera_summary, print_progress, run_stepwise_analysis
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration-dbp", type=float, help="Optional cuff calibrated diastolic baseline.")
     parser.add_argument("--sample-rate", type=float, default=200.0, help="Fallback sample rate. Default: 200")
     parser.add_argument("--csv-input", help="Optional offline CSV input for testing.")
+    parser.add_argument("--camera-summary", help="Optional camera_rppg_summary.json path for camera+iPPG fusion.")
     parser.add_argument("--no-prompt", action="store_true", help="Run without asking interactive questions.")
     parser.add_argument("--no-pause", action="store_true", help="Do not wait for Enter before closing when launched without args.")
     return parser.parse_args()
@@ -160,10 +161,17 @@ def build_profile_namespace(args: argparse.Namespace) -> SimpleNamespace:
 def run_measurement(args: argparse.Namespace) -> tuple[Path, Path]:
     output_dir = (ROOT_DIR / "cardiovascular_autonomic_domain" / "outputs" / f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}").resolve()
     capture_path: Path | None = None
+    camera_summary = load_camera_summary(Path(args.camera_summary).resolve()) if args.camera_summary else None
 
     if args.csv_input:
         print("Using existing CSV input for sequential measurement.")
-        dataset = load_dataset_from_csv(Path(args.csv_input).resolve(), fallback_sample_rate_hz=args.sample_rate)
+        csv_path = Path(args.csv_input).resolve()
+        dataset = load_dataset_from_csv(csv_path, fallback_sample_rate_hz=args.sample_rate)
+        if camera_summary is None:
+            auto_camera_summary_path = csv_path.parent / "camera_rppg_summary.json"
+            camera_summary = load_camera_summary(auto_camera_summary_path)
+            if camera_summary is not None:
+                print(f"Detected camera summary for fusion: {auto_camera_summary_path}")
     else:
         if not args.port:
             raise ValueError("A serial port is required unless --csv-input is used.")
@@ -175,7 +183,7 @@ def run_measurement(args: argparse.Namespace) -> tuple[Path, Path]:
         print("Signal capture complete. Starting section 1.1 to 1.7 calculations...")
 
     profile = build_user_profile(build_profile_namespace(args))
-    report = run_stepwise_analysis(dataset, profile, progress=print_progress)
+    report = run_stepwise_analysis(dataset, profile, camera_summary=camera_summary, progress=print_progress)
     report_path, summary_path = write_report_files(output_dir, report, capture_path=capture_path)
 
     print(format_console_summary(report))

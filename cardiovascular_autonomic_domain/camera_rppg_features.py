@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from cardiovascular_metrics import bandpass_filter, detect_systolic_peaks, estimate_sample_rate
+from oss_signal_adapters import analyze_rppg_signal_with_oss
 
 
 EPSILON = 1e-9
@@ -84,6 +85,16 @@ def _normalize_channel_trace(trace: np.ndarray) -> np.ndarray:
     return centered / scale
 
 
+def _coeff_variation(values: np.ndarray) -> float:
+    values = np.asarray(values, dtype=float)
+    if values.size == 0:
+        return 0.0
+    mean_value = float(np.mean(values))
+    if abs(mean_value) <= EPSILON:
+        return 0.0
+    return float(np.std(values) / abs(mean_value))
+
+
 def _build_rgb_signals(rgb_trace: np.ndarray) -> dict[str, np.ndarray]:
     if rgb_trace.size == 0:
         empty = np.asarray([], dtype=float)
@@ -131,14 +142,69 @@ def _estimate_hr(signal: np.ndarray, timestamps_s: np.ndarray) -> tuple[float, n
     return float(60.0 / np.mean(rr_s)), filtered
 
 
+def _estimate_signal_quality(raw_signal: np.ndarray, filtered_signal: np.ndarray) -> float:
+    raw_signal = np.asarray(raw_signal, dtype=float)
+    filtered_signal = np.asarray(filtered_signal, dtype=float)
+    if raw_signal.size == 0 or filtered_signal.size == 0:
+        return 0.0
+    centered_raw = raw_signal - np.mean(raw_signal)
+    filtered_std = float(np.std(filtered_signal))
+    noise_std = float(np.std(centered_raw[: filtered_signal.size] - filtered_signal))
+    return float(np.clip(100.0 * filtered_std / (filtered_std + noise_std + EPSILON), 0.0, 100.0))
+
+
+def _estimate_rhythm_stability_score(filtered_signal: np.ndarray, sample_rate_hz: float) -> tuple[float, int]:
+    filtered_signal = np.asarray(filtered_signal, dtype=float)
+    if filtered_signal.size < 10 or sample_rate_hz <= 0.0:
+        return 0.0, 0
+    peaks = detect_systolic_peaks(filtered_signal, sample_rate_hz)
+    if peaks.size < 3:
+        return 0.0, int(peaks.size)
+    rr_s = np.diff(peaks) / sample_rate_hz
+    if rr_s.size == 0 or np.mean(rr_s) <= EPSILON:
+        return 0.0, int(peaks.size)
+    rr_cv = float(np.std(rr_s) / max(np.mean(rr_s), EPSILON))
+    score = float(np.clip(100.0 - (rr_cv / 0.18) * 100.0, 0.0, 100.0))
+    return score, int(peaks.size)
+
+
+def _estimate_roi_stability_score(frame_records: list[dict[str, float | int | str]]) -> float:
+    if not frame_records:
+        return 0.0
+    center_x_values: list[float] = []
+    center_y_values: list[float] = []
+    area_ratio_values: list[float] = []
+    for row in frame_records:
+        frame_width = float(row.get("frame_width") or 0.0)
+        frame_height = float(row.get("frame_height") or 0.0)
+        roi_x = float(row.get("roi_x") or 0.0)
+        roi_y = float(row.get("roi_y") or 0.0)
+        roi_w = float(row.get("roi_w") or 0.0)
+        roi_h = float(row.get("roi_h") or 0.0)
+        if frame_width <= 0.0 or frame_height <= 0.0:
+            continue
+        center_x_values.append((roi_x + 0.5 * roi_w) / frame_width)
+        center_y_values.append((roi_y + 0.5 * roi_h) / frame_height)
+        area_ratio_values.append((roi_w * roi_h) / max(frame_width * frame_height, EPSILON))
+
+    if not center_x_values or not center_y_values or not area_ratio_values:
+        return 0.0
+
+    position_jitter = float(np.hypot(np.std(center_x_values), np.std(center_y_values)))
+    area_cv = _coeff_variation(np.asarray(area_ratio_values, dtype=float))
+    position_score = float(np.clip(100.0 - (position_jitter / 0.08) * 100.0, 0.0, 100.0))
+    area_score = float(np.clip(100.0 - (area_cv / 0.15) * 100.0, 0.0, 100.0))
+    return 0.60 * position_score + 0.40 * area_score
+
+
 def extract_camera_rppg_features(
     video_path: Path,
     output_dir: Path,
     frame_timestamps_path: Path | None = None,
     status_callback: StatusCallback = None,
-) -> dict[str, Path | float | int | str]:
+) -> dict[str, object]:
     if not video_path.exists():
-        raise FileNotFoundError(f"Video file was not found: {video_path}")
+        raise FileNotFoundError(f"영상 파일을 찾지 못했습니다: {video_path}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     features_csv_path = output_dir / "camera_rppg_features.csv"
@@ -149,7 +215,7 @@ def extract_camera_rppg_features(
 
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
-        raise RuntimeError(f"Unable to open video: {video_path}")
+        raise RuntimeError(f"영상을 열 수 없습니다: {video_path}")
 
     frame_records: list[dict[str, float | int | str]] = []
     rgb_trace: list[list[float]] = []
@@ -158,7 +224,7 @@ def extract_camera_rppg_features(
     detected_face_count = 0
     frame_index = 0
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
-    _emit_status(status_callback, f"Extracting camera rPPG features from {video_path.name}")
+    _emit_status(status_callback, f"{video_path.name} 영상에서 카메라 rPPG 특징을 추출합니다.")
 
     try:
         while True:
@@ -205,6 +271,8 @@ def extract_camera_rppg_features(
                     "frame_index": frame_index,
                     "timestamp_s": timestamp_s,
                     "roi_source": roi_source,
+                    "frame_width": frame_width,
+                    "frame_height": frame_height,
                     "roi_x": roi_x,
                     "roi_y": roi_y,
                     "roi_w": roi_w,
@@ -217,12 +285,12 @@ def extract_camera_rppg_features(
 
             frame_index += 1
             if frame_index % 120 == 0:
-                _emit_status(status_callback, f"Processed {frame_index} video frames")
+                _emit_status(status_callback, f"영상 프레임 {frame_index}개를 처리했습니다.")
     finally:
         capture.release()
 
     if not frame_records:
-        raise RuntimeError("No usable camera frames were processed.")
+        raise RuntimeError("처리 가능한 카메라 프레임이 없습니다.")
 
     rgb_array = np.asarray(rgb_trace, dtype=float)
     timestamps_array = np.asarray(timestamps_s, dtype=float)
@@ -236,6 +304,56 @@ def extract_camera_rppg_features(
         filtered_map[signal_name] = filtered
 
     selected_signal = max(hr_map, key=lambda key: abs(hr_map[key])) if hr_map else "green"
+    selected_signal_values = np.asarray(signal_map[selected_signal], dtype=float)
+    selected_filtered_values = np.asarray(filtered_map[selected_signal], dtype=float)
+    selected_sample_rate_hz = float(estimate_sample_rate(timestamps_array))
+    selected_hr_bpm = float(hr_map.get(selected_signal, 0.0))
+    selected_hr_bpm_rule_based = float(selected_hr_bpm)
+    selected_signal_quality_score = _estimate_signal_quality(selected_signal_values, selected_filtered_values)
+    selected_signal_quality_score_rule_based = float(selected_signal_quality_score)
+    selected_band_strength_score = float(np.clip(np.std(selected_filtered_values) / 0.35 * 100.0, 0.0, 100.0))
+    rhythm_stability_score, selected_peak_count = _estimate_rhythm_stability_score(selected_filtered_values, selected_sample_rate_hz)
+    oss_rppg_report = analyze_rppg_signal_with_oss(selected_signal_values, selected_sample_rate_hz)
+    selected_signal_quality_score_neurokit = float(oss_rppg_report.get("quality_score") or 0.0)
+    selected_peak_count_neurokit = int(oss_rppg_report.get("peak_count") or 0)
+    if selected_signal_quality_score_neurokit > 0.0:
+        if selected_signal_quality_score_rule_based > 0.0:
+            selected_signal_quality_score = float(
+                np.clip(
+                    0.60 * selected_signal_quality_score_rule_based + 0.40 * selected_signal_quality_score_neurokit,
+                    0.0,
+                    100.0,
+                )
+            )
+        else:
+            selected_signal_quality_score = float(selected_signal_quality_score_neurokit)
+    selected_peak_count = max(selected_peak_count, selected_peak_count_neurokit)
+    neurokit_hr_bpm = float(oss_rppg_report.get("heart_rate_bpm") or 0.0)
+    if 40.0 <= neurokit_hr_bpm <= 180.0:
+        if 40.0 <= selected_hr_bpm_rule_based <= 180.0 and abs(neurokit_hr_bpm - selected_hr_bpm_rule_based) <= 18.0:
+            selected_hr_bpm = float(0.70 * selected_hr_bpm_rule_based + 0.30 * neurokit_hr_bpm)
+        elif not (40.0 <= selected_hr_bpm_rule_based <= 180.0):
+            selected_hr_bpm = float(neurokit_hr_bpm)
+    roi_stability_score = _estimate_roi_stability_score(frame_records)
+    camera_perfusion_proxy_score = (
+        0.50 * selected_signal_quality_score
+        + 0.35 * selected_band_strength_score
+        + 0.15 * roi_stability_score
+    )
+    camera_vascular_proxy_score = (
+        0.45 * selected_signal_quality_score
+        + 0.35 * rhythm_stability_score
+        + 0.20 * roi_stability_score
+    )
+    camera_perfusion_index_proxy = float(
+        np.clip(
+            0.50 * (selected_signal_quality_score / 100.0)
+            + 0.35 * (selected_band_strength_score / 100.0)
+            + 0.15 * (roi_stability_score / 100.0),
+            0.0,
+            1.0,
+        )
+    )
     for index, row in enumerate(frame_records):
         row["signal_green"] = float(signal_map["green"][index])
         row["signal_pos"] = float(signal_map["pos"][index])
@@ -254,9 +372,13 @@ def extract_camera_rppg_features(
     warnings: list[str] = []
     detection_ratio = detected_face_count / max(len(frame_records), 1)
     if detection_ratio < 0.25:
-        warnings.append("Face detection was weak; center fallback ROI was used often.")
-    if hr_map.get(selected_signal, 0.0) <= 0.0:
-        warnings.append("Camera HR estimation was weak for this video.")
+        warnings.append("얼굴 검출이 약해 중앙 대체 ROI를 자주 사용했습니다.")
+    if selected_hr_bpm <= 0.0:
+        warnings.append("이 영상에서는 카메라 기반 HR 추정 신뢰도가 낮습니다.")
+    for item in oss_rppg_report.get("warnings") or []:
+        warnings.append(str(item))
+    if oss_rppg_report.get("error"):
+        warnings.append(f"NeuroKit2 camera analysis warning: {oss_rppg_report['error']}")
 
     summary = {
         "video_path": str(video_path),
@@ -268,16 +390,31 @@ def extract_camera_rppg_features(
         "hr_pos_bpm": float(hr_map["pos"]),
         "hr_chrom_bpm": float(hr_map["chrom"]),
         "selected_signal": selected_signal,
-        "selected_hr_bpm": float(hr_map.get(selected_signal, 0.0)),
+        "selected_hr_bpm_rule_based": float(selected_hr_bpm_rule_based),
+        "selected_hr_bpm_neurokit": float(neurokit_hr_bpm),
+        "selected_hr_bpm": float(selected_hr_bpm),
+        "selected_signal_quality_score_rule_based": float(selected_signal_quality_score_rule_based),
+        "selected_signal_quality_score_neurokit": float(selected_signal_quality_score_neurokit),
+        "selected_signal_quality_score": float(selected_signal_quality_score),
+        "selected_band_strength_score": float(selected_band_strength_score),
+        "selected_peak_count": int(selected_peak_count),
+        "selected_peak_count_neurokit": int(selected_peak_count_neurokit),
+        "rhythm_stability_score": float(rhythm_stability_score),
+        "roi_stability_score": float(roi_stability_score),
+        "camera_perfusion_proxy_score": float(camera_perfusion_proxy_score),
+        "camera_perfusion_index_proxy": float(camera_perfusion_index_proxy),
+        "camera_vascular_proxy_score": float(camera_vascular_proxy_score),
+        "open_source": oss_rppg_report,
         "warnings": warnings,
     }
     with summary_json_path.open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2)
 
-    _emit_status(status_callback, "Camera rPPG feature extraction finished.")
+    _emit_status(status_callback, "카메라 rPPG 특징 추출이 완료되었습니다.")
     return {
         "features_csv_path": features_csv_path,
         "summary_json_path": summary_json_path,
         "selected_signal": selected_signal,
-        "selected_hr_bpm": float(hr_map.get(selected_signal, 0.0)),
+        "selected_hr_bpm": float(selected_hr_bpm),
+        "summary": summary,
     }

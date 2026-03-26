@@ -20,6 +20,21 @@
 6. HealthCare.py 메인 실행 구조 정리
 설명: 루트에 `HealthCare.py`를 추가해 전체 기능을 올인원 UI로 실행할 수 있게 정리했고, 기존 `run_cardiovascular_gui.py`와 `run_camera_rppg_extraction.py`는 보조 실행 경로로 유지했습니다.
 
+7. UI 한국어화 및 모바일형 해상도 반영
+설명: `cardiovascular_autonomic_domain/gui_app.py`를 기준으로 주요 버튼, 상태 문구, 탭 구성을 한국어로 정리하고 기본 창 크기를 `1080 x 1920`으로 맞췄습니다.
+
+8. 카메라+iPPG 융합 분석과 신뢰도 게이트 추가
+설명: `sequential_measurement_session.py`, `camera_rppg_features.py`를 확장해 카메라 HR, 관류 프록시, 혈관 프록시를 iPPG 분석에 보조 반영하고, 전체 신뢰도와 무응답 권장 로직을 함께 표시하도록 구성했습니다.
+
+9. 제품형 런타임 기능 보강
+설명: `diagnostics.py`, `product_store.py`, `multimodal_capture.py`, `capture_and_analyze.py`, `gui_app.py`를 확장해 프로필 저장, 측정 이력, 진단 로그, 시리얼/카메라 재시도, 카메라 노출·화이트밸런스·게인 설정, 장치 재연결 흐름을 추가했습니다.
+
+10. 1.3 ~ 1.7 ML 추론 프레임워크 추가
+설명: `ml_inference.py`를 추가하고 `sequential_measurement_session.py`에 연결해 스트레스, 순환, 혈관 건강, 혈관 나이, 혈압 추론이 공통 피처 페이로드 기반으로 동작하도록 정리했습니다. 현재 기본 번들은 부트스트랩 모델이며, 실측 데이터 재학습 번들로 교체 가능하게 구성했습니다.
+
+11. 외부 오픈소스 신호 엔진 실제 연동
+설명: `oss_signal_adapters.py`를 추가하고 `requirements.txt`, `camera_rppg_features.py`, `sequential_measurement_session.py`, `README.md`를 갱신해 `NeuroKit2`와 `pyPPG`를 실제 분석 경로에 연결했습니다. 접촉식 PPG는 HR/HRV/SQI/바이오마커 보강, 카메라 rPPG는 NeuroKit2 기반 HR/품질 보강이 가능하도록 정리했습니다.
+
 ## 2026-03-25
 
 1. 심혈관·자율신경 측정 워크스페이스 구현

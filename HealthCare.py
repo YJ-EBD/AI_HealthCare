@@ -26,9 +26,9 @@ sys.path.insert(0, str(ROOT_DIR / "cardiovascular_autonomic_domain"))
 try:
     from gui_app import main
 except ImportError as exc:
-    print("Unable to start the all-in-one HealthCare UI.")
-    print("Install PySide6 and opencv-python in the project virtual environment first.")
-    print(f"Import error: {exc}")
+    print("올인원 HealthCare UI를 시작할 수 없습니다.")
+    print("프로젝트 가상환경에 PySide6와 opencv-python이 설치되어 있는지 확인하세요.")
+    print(f"가져오기 오류: {exc}")
     raise SystemExit(1)
 
 

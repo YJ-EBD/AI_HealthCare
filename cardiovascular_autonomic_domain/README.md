@@ -119,7 +119,9 @@ Notes:
 - The optional left-right channel delta term from section 1.4 is supported only if a second synchronized PPG channel is added to the CSV as `aux` or `ppg_aux_raw`.
 - The blood pressure output is calibration-aware. Without cuff calibration it should be treated as a trend estimate, not a diagnostic reading.
 - Vascular age is a research-style regression estimate anchored to the provided age and signal features.
+- The current runtime integrates open-source signal engines directly: `NeuroKit2` for contact/camera HR and HRV support, `pyPPG` for contact PPG SQI and morphology biomarkers, and `pyVHR` as an optional dependency that is only marked available when its extra runtime requirements are installed.
 - `DEVELOPMENT_SUMMARY_1_1_TO_1_7.md` is the short product-planning summary for which sensor or AI combination to use for each section.
 - `PRODUCTIZATION_BLUEPRINT.md` and `productization_targets.yaml` describe how to evolve the current heuristic pipeline into a multimodal product stack built around a 4K camera, PSL-iPPG2C, quality gating, supervised learning, and regulatory-aware claims.
 - `camera_rppg_features.py` extracts classical camera rPPG candidate signals from recorded video using a face ROI or a center fallback ROI.
+- `camera_rppg_features.py` also runs `NeuroKit2` on the selected camera signal to refine HR and camera signal quality.
 - `multimodal_capture.py` stores a synchronized camera/video dataset alongside the live iPPG capture so the same session can be used later for model training.

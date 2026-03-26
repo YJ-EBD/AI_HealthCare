@@ -13,6 +13,7 @@ import numpy as np
 import serial
 
 from cardiovascular_metrics import SignalDataset, UserProfile, analyze_dataset, estimate_sample_rate
+from diagnostics import log_event, log_exception
 
 
 def parse_float(value: str | None) -> float | None:
@@ -90,37 +91,69 @@ def capture_serial_session(
     duration_s: float,
     fallback_sample_rate_hz: float,
     status_callback: Callable[[str], None] | None = None,
+    retry_count: int = 2,
+    reopen_delay_s: float = 1.0,
+    no_data_timeout_s: float = 5.0,
 ) -> list[dict[str, float | int]]:
-    samples: list[dict[str, float | int]] = []
-    started_at = time.time()
-
     def emit_status(message: str) -> None:
         if status_callback is not None:
             status_callback(message)
         else:
             print(message)
+    last_error: BaseException | None = None
 
-    with serial.Serial(port=port, baudrate=baud, timeout=0.3) as connection:
-        connection.reset_input_buffer()
-        time.sleep(1.0)
-        emit_status(f"Capturing serial data from {port} at {baud} baud for {duration_s:.1f} seconds...")
+    for attempt in range(retry_count + 1):
+        samples: list[dict[str, float | int]] = []
+        started_at = time.time()
+        last_data_at = started_at
+        attempt_label = f"{attempt + 1}/{retry_count + 1}"
+        try:
+            log_event(
+                "serial_capture",
+                "시리얼 수집을 시작합니다.",
+                details={"port": port, "baud": baud, "attempt": attempt + 1, "duration_s": duration_s},
+            )
+            with serial.Serial(port=port, baudrate=baud, timeout=0.3) as connection:
+                connection.reset_input_buffer()
+                time.sleep(1.0)
+                emit_status(f"{port} 포트에서 {baud} baud로 {duration_s:.1f}초 동안 시리얼 데이터를 수집합니다... (시도 {attempt_label})")
 
-        while time.time() - started_at < duration_s:
-            raw_line = connection.readline()
-            if not raw_line:
-                continue
-            line = raw_line.decode("utf-8", errors="ignore")
-            parsed = parse_arduino_line(line, fallback_sample_rate_hz=fallback_sample_rate_hz, implicit_index=len(samples))
-            if parsed is not None:
-                samples.append(parsed)
-                if len(samples) % 500 == 0:
-                    elapsed = time.time() - started_at
-                    emit_status(f"  collected {len(samples)} samples in {elapsed:.1f}s")
+                while time.time() - started_at < duration_s:
+                    raw_line = connection.readline()
+                    now = time.time()
+                    if not raw_line:
+                        if now - last_data_at >= no_data_timeout_s:
+                            raise TimeoutError(f"{no_data_timeout_s:.1f}초 동안 시리얼 데이터가 들어오지 않았습니다.")
+                        continue
+                    line = raw_line.decode("utf-8", errors="ignore")
+                    parsed = parse_arduino_line(line, fallback_sample_rate_hz=fallback_sample_rate_hz, implicit_index=len(samples))
+                    if parsed is not None:
+                        last_data_at = now
+                        samples.append(parsed)
+                        if len(samples) % 500 == 0:
+                            elapsed = now - started_at
+                            emit_status(f"  {elapsed:.1f}초 동안 {len(samples)}개 샘플을 수집했습니다")
+            if samples:
+                log_event(
+                    "serial_capture",
+                    "시리얼 수집이 완료되었습니다.",
+                    details={"port": port, "sample_count": len(samples), "attempt": attempt + 1},
+                )
+                return samples
+            raise RuntimeError("시리얼 포트에서 사용할 수 있는 샘플을 하나도 수집하지 못했습니다.")
+        except BaseException as exc:  # noqa: BLE001
+            last_error = exc
+            log_exception(
+                "serial_capture",
+                exc,
+                details={"port": port, "baud": baud, "attempt": attempt + 1, "retry_count": retry_count},
+            )
+            if attempt >= retry_count:
+                break
+            emit_status(f"시리얼 연결을 다시 시도합니다. ({attempt_label} 실패: {exc})")
+            time.sleep(reopen_delay_s)
 
-    if not samples:
-        raise RuntimeError("No usable samples were captured from the serial port.")
-
-    return samples
+    raise RuntimeError(f"시리얼 수집에 실패했습니다: {last_error}") from last_error
 
 
 def write_capture_csv(path: Path, samples: list[dict[str, float | int]]) -> None:
@@ -150,7 +183,7 @@ def load_dataset_from_csv(path: Path, fallback_sample_rate_hz: float) -> SignalD
         rows = list(reader)
 
     if not rows:
-        raise ValueError(f"No rows were found in {path}.")
+        raise ValueError(f"{path} 파일에서 읽을 수 있는 행이 없습니다.")
 
     for index, row in enumerate(rows):
         timestamp_s = parse_float(row.get("timestamp_s"))
@@ -164,7 +197,7 @@ def load_dataset_from_csv(path: Path, fallback_sample_rate_hz: float) -> SignalD
         if ppg_value is None:
             ppg_value = parse_float(row.get("ppg_v"))
         if ppg_value is None:
-            raise ValueError("Unable to find a usable PPG column in the CSV input.")
+            raise ValueError("CSV 입력에서 사용할 수 있는 PPG 컬럼을 찾지 못했습니다.")
 
         beat_value = parse_float(row.get("beat_raw"))
         if beat_value is None or math.isnan(beat_value):
@@ -222,24 +255,54 @@ def write_report_files(output_dir: Path, report: dict[str, Any], capture_path: P
     vascular_health = report["vascular_health"]
     vascular_age = report["vascular_age"]
     blood_pressure = report["blood_pressure"]
+    metadata = report.get("metadata") or {}
+    camera = report.get("camera") or {}
+    ml_report = report.get("ml") or {}
+    quality = report.get("quality") or {}
+    no_read_outputs = quality.get("no_read_outputs") or []
+    quality_outputs = quality.get("outputs") or {}
+    quality_line = " | ".join(
+        f"{key} {float(value.get('confidence_score') or 0.0):.0f}"
+        for key, value in quality_outputs.items()
+    )
 
     lines = [
-        "Cardiovascular and autonomic analysis summary",
+        "심혈관 및 자율신경 분석 요약",
         "",
-        f"1.1 Heart rate: {heart_rate['heart_rate_bpm']:.2f} bpm",
-        f"1.2 HRV: SDNN {hrv['sdnn_ms']:.2f} ms | RMSSD {hrv['rmssd_ms']:.2f} ms | pNN50 {hrv['pnn50']:.2f}% | score {hrv['hrv_score']:.2f}",
-        f"1.3 Stress: score {stress['stress_score']:.2f} / 100 | state {stress['stress_state']}",
-        f"1.4 Circulation: score {circulation['circulation_score']:.2f} | rise time {circulation['median_rise_time_s']:.3f}s",
-        f"1.5 Vascular health: score {vascular_health['vascular_health_score']:.2f} | reflection index {vascular_health['reflection_index']}",
-        f"1.6 Vascular age: estimate {vascular_age['vascular_age_estimate']:.1f} years | gap {vascular_age['vascular_age_gap']:+.1f}",
-        f"1.7 Blood pressure: {blood_pressure['estimated_sbp']:.1f}/{blood_pressure['estimated_dbp']:.1f} mmHg | trend {blood_pressure['blood_pressure_trend']}",
+        f"측정 모드: {metadata.get('measurement_mode_label', 'iPPG 단독')}",
+        f"ML 추론: {'적용' if ml_report.get('available') else '미적용'}",
+        f"전체 신뢰도: {float(quality.get('overall_confidence_score') or 0.0):.2f} / 100",
+        f"1.1 심박수: {heart_rate['heart_rate_bpm']:.2f} bpm",
+        f"1.2 HRV: SDNN {hrv['sdnn_ms']:.2f} ms | RMSSD {hrv['rmssd_ms']:.2f} ms | pNN50 {hrv['pnn50']:.2f}% | 점수 {hrv['hrv_score']:.2f}",
+        f"1.3 스트레스: 점수 {stress['stress_score']:.2f} / 100 | 상태 {stress['stress_state']}",
+        f"1.4 순환: 점수 {circulation['circulation_score']:.2f} | 상승 시간 {circulation['median_rise_time_s']:.3f}s",
+        f"1.5 혈관 건강: 점수 {vascular_health['vascular_health_score']:.2f} | 반사 지수 {vascular_health['reflection_index']}",
+        f"1.6 혈관 나이: 추정 {vascular_age['vascular_age_estimate']:.1f}세 | 차이 {vascular_age['vascular_age_gap']:+.1f}",
+        f"1.7 혈압: {blood_pressure['estimated_sbp']:.1f}/{blood_pressure['estimated_dbp']:.1f} mmHg | 추세 {blood_pressure['blood_pressure_trend']}",
+        f"출력 신뢰도: {quality_line or '-'}",
+        f"무응답 권장: {', '.join(no_read_outputs) if no_read_outputs else '없음'}",
         "",
-        "Warnings:",
+        "경고:",
     ]
+    if camera.get("available"):
+        camera_hr_text = f"{float(camera['camera_hr_bpm']):.2f} bpm" if camera.get("camera_hr_bpm") is not None else "미검출"
+        face_text = f"{float(camera['face_detection_ratio']) * 100.0:.1f}%" if camera.get("face_detection_ratio") is not None else "-"
+        signal_text = str(camera.get("selected_signal_label") or "-")
+        perfusion_text = f"{float(camera.get('camera_perfusion_proxy_score') or 0.0):.1f}"
+        vascular_text = f"{float(camera.get('camera_vascular_proxy_score') or 0.0):.1f}"
+        lines.insert(
+            2,
+            f"카메라 보조: {camera.get('measurement_mode_label', '카메라 보조 분석')} | 카메라 HR {camera_hr_text} | 얼굴 검출률 {face_text} | 신호 {signal_text} | 관류 프록시 {perfusion_text} | 혈관 프록시 {vascular_text}",
+        )
+    if ml_report.get("available"):
+        lines.insert(
+            3 if camera.get("available") else 2,
+            f"ML 모델: {ml_report.get('bundle_version') or '-'} | {'기본 번들' if ml_report.get('bootstrap_bundle') else '사용자 학습 번들'}",
+        )
     if report["warnings"]:
         lines.extend(f"- {warning}" for warning in report["warnings"])
     else:
-        lines.append("- None")
+        lines.append("- 없음")
 
     with summary_path.open("w", encoding="utf-8") as handle:
         handle.write("\n".join(lines))
@@ -277,7 +340,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.port and not args.csv_input:
-        parser.error("Provide either --port for live capture or --csv-input for offline analysis.")
+        parser.error("--port로 라이브 측정을 하거나 --csv-input으로 오프라인 분석 파일을 지정하세요.")
 
     output_dir = Path(args.output_dir).resolve()
     capture_path: Path | None = None
@@ -294,11 +357,11 @@ def main() -> None:
     report_path, summary_path = write_report_files(output_dir, report, capture_path=capture_path)
 
     print("")
-    print("Analysis complete.")
-    print(f"Report JSON : {report_path}")
-    print(f"Summary TXT : {summary_path}")
+    print("분석이 완료되었습니다.")
+    print(f"리포트 JSON : {report_path}")
+    print(f"요약 TXT    : {summary_path}")
     if capture_path is not None:
-        print(f"Capture CSV : {capture_path}")
+        print(f"캡처 CSV    : {capture_path}")
 
 
 if __name__ == "__main__":
