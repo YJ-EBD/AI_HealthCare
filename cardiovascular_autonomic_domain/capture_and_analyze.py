@@ -7,7 +7,7 @@ import math
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import serial
@@ -84,14 +84,26 @@ def parse_arduino_line(line: str, fallback_sample_rate_hz: float, implicit_index
     return None
 
 
-def capture_serial_session(port: str, baud: int, duration_s: float, fallback_sample_rate_hz: float) -> list[dict[str, float | int]]:
+def capture_serial_session(
+    port: str,
+    baud: int,
+    duration_s: float,
+    fallback_sample_rate_hz: float,
+    status_callback: Callable[[str], None] | None = None,
+) -> list[dict[str, float | int]]:
     samples: list[dict[str, float | int]] = []
     started_at = time.time()
+
+    def emit_status(message: str) -> None:
+        if status_callback is not None:
+            status_callback(message)
+        else:
+            print(message)
 
     with serial.Serial(port=port, baudrate=baud, timeout=0.3) as connection:
         connection.reset_input_buffer()
         time.sleep(1.0)
-        print(f"Capturing serial data from {port} at {baud} baud for {duration_s:.1f} seconds...")
+        emit_status(f"Capturing serial data from {port} at {baud} baud for {duration_s:.1f} seconds...")
 
         while time.time() - started_at < duration_s:
             raw_line = connection.readline()
@@ -103,7 +115,7 @@ def capture_serial_session(port: str, baud: int, duration_s: float, fallback_sam
                 samples.append(parsed)
                 if len(samples) % 500 == 0:
                     elapsed = time.time() - started_at
-                    print(f"  collected {len(samples)} samples in {elapsed:.1f}s")
+                    emit_status(f"  collected {len(samples)} samples in {elapsed:.1f}s")
 
     if not samples:
         raise RuntimeError("No usable samples were captured from the serial port.")
@@ -113,7 +125,13 @@ def capture_serial_session(port: str, baud: int, duration_s: float, fallback_sam
 
 def write_capture_csv(path: Path, samples: list[dict[str, float | int]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["timestamp_s", "sample", "ppg", "beat", "ppg_raw", "beat_raw", "ppg_v", "beat_v"]
+    standard_fieldnames = ["timestamp_s", "sample", "ppg", "beat", "ppg_raw", "beat_raw", "ppg_v", "beat_v"]
+    extra_fieldnames: list[str] = []
+    for sample in samples:
+        for key in sample:
+            if key not in standard_fieldnames and key not in extra_fieldnames:
+                extra_fieldnames.append(key)
+    fieldnames = [*standard_fieldnames, *extra_fieldnames]
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()

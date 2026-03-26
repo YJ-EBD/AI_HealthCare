@@ -1,5 +1,25 @@
 # HealthCare 개발 내역
 
+## 2026-03-26
+
+1. ESP32-DWVKIT V4 기반 PSL-iPPG2C 측정 경로 추가
+설명: `cardiovascular_autonomic_domain/arduino/psl_iPPG2C_esp32_dwkit_v4/` 스케치와 배선 문서를 추가하고, 기존 Python 분석 파이프라인이 그대로 읽을 수 있는 시리얼 포맷으로 맞췄습니다.
+
+2. 1.1 ~ 1.7 제품화 전략 문서 정리
+설명: `DEVELOPMENT_SUMMARY_1_1_TO_1_7.md`, `PRODUCTIZATION_BLUEPRINT.md`, `productization_targets.yaml`를 추가해 4K 카메라, PSL-iPPG2C, ML/DL 조합별 개발 방향과 제품화 범위를 정리했습니다.
+
+3. PySide6 기반 올인원 데스크톱 UI 구현
+설명: `cardiovascular_autonomic_domain/gui_app.py`를 추가하고, 측정/분석/카메라 미리보기/결과 확인/전략 문서 열람을 한 화면에서 처리할 수 있는 UI를 구현했습니다.
+
+4. 멀티모달 데이터셋 수집 기능 추가
+설명: `multimodal_capture.py`를 추가해 시리얼 iPPG와 카메라 영상을 동기화 저장하고, `capture.csv`, `camera_rgb.mp4`, `camera_frames.csv`, `session_manifest.json`이 함께 생성되도록 구성했습니다.
+
+5. 카메라 rPPG 후보 신호 추출 기능 구현
+설명: `camera_rppg_features.py`와 오프라인 추출 흐름을 추가해 저장된 영상에서 얼굴 또는 중앙 ROI 기반 `green/POS/CHROM` 신호와 카메라 HR 추정값을 뽑을 수 있도록 구성했습니다.
+
+6. HealthCare.py 메인 실행 구조 정리
+설명: 루트에 `HealthCare.py`를 추가해 전체 기능을 올인원 UI로 실행할 수 있게 정리했고, 기존 `run_cardiovascular_gui.py`와 `run_camera_rppg_extraction.py`는 보조 실행 경로로 유지했습니다.
+
 ## 2026-03-25
 
 1. 심혈관·자율신경 측정 워크스페이스 구현

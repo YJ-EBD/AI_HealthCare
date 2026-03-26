@@ -13,16 +13,46 @@ Implemented outputs:
 
 Files:
 - `arduino/psl_iPPG2C_cardiovascular_autonomic/psl_iPPG2C_cardiovascular_autonomic.ino`
+- `arduino/psl_iPPG2C_esp32_dwkit_v4/psl_iPPG2C_esp32_dwkit_v4.ino`
+- `arduino/psl_iPPG2C_esp32_dwkit_v4/WIRING.md`
+- `DEVELOPMENT_SUMMARY_1_1_TO_1_7.md`
+- `PRODUCTIZATION_BLUEPRINT.md`
+- `productization_targets.yaml`
+- `gui_app.py`
+- `camera_rppg_features.py`
+- `multimodal_capture.py`
 - `capture_and_analyze.py`
 - `sequential_measurement_session.py`
 - `cardiovascular_metrics.py`
 - `generate_synthetic_ppg.py`
 
-Recommended entrypoint:
+Recommended all-in-one entrypoint:
 
 ```powershell
-python .\run_cardiovascular_measurement.py
+python .\HealthCare.py
 ```
+
+Desktop GUI entrypoint:
+
+```powershell
+python .\HealthCare.py
+```
+
+Offline camera rPPG extraction:
+
+```powershell
+python .\run_camera_rppg_extraction.py --video .\cardiovascular_autonomic_domain\outputs\synthetic_camera_test\camera_rgb.mp4 --frame-csv .\cardiovascular_autonomic_domain\outputs\synthetic_camera_test\camera_frames.csv
+```
+
+The GUI supports:
+
+- live serial measurement with `iPPG2C`
+- offline CSV analysis
+- optional `camera + iPPG` multimodal dataset capture
+- camera preview and camera selection
+- saved `capture.csv`, `camera_rgb.mp4`, `camera_frames.csv`, and `session_manifest.json`
+- automatic offline camera `rPPG` feature extraction to `camera_rppg_features.csv` and `camera_rppg_summary.json`
+- all of the above from one UI
 
 If `.venv` exists, the runner automatically re-launches itself with `C:\AI_HealthCare\.venv\Scripts\python.exe`.
 
@@ -66,6 +96,16 @@ Arduino CLI compile examples:
 ```powershell
 & 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn arduino:renesas_uno:minima 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_cardiovascular_autonomic'
 & 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn arduino:renesas_uno:unor4wifi 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_cardiovascular_autonomic'
+& 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn esp32:esp32:esp32 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_esp32_dwkit_v4'
+```
+
+ESP32-DWVKIT V4 wiring and upload:
+
+- Wiring diagram: `arduino/psl_iPPG2C_esp32_dwkit_v4/WIRING.md`
+- Example upload command for a classic ESP32 Dev Module on `COM8`:
+
+```powershell
+& 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn esp32:esp32:esp32 --upload -p COM8 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_esp32_dwkit_v4'
 ```
 
 Smoke test without hardware:
@@ -79,3 +119,7 @@ Notes:
 - The optional left-right channel delta term from section 1.4 is supported only if a second synchronized PPG channel is added to the CSV as `aux` or `ppg_aux_raw`.
 - The blood pressure output is calibration-aware. Without cuff calibration it should be treated as a trend estimate, not a diagnostic reading.
 - Vascular age is a research-style regression estimate anchored to the provided age and signal features.
+- `DEVELOPMENT_SUMMARY_1_1_TO_1_7.md` is the short product-planning summary for which sensor or AI combination to use for each section.
+- `PRODUCTIZATION_BLUEPRINT.md` and `productization_targets.yaml` describe how to evolve the current heuristic pipeline into a multimodal product stack built around a 4K camera, PSL-iPPG2C, quality gating, supervised learning, and regulatory-aware claims.
+- `camera_rppg_features.py` extracts classical camera rPPG candidate signals from recorded video using a face ROI or a center fallback ROI.
+- `multimodal_capture.py` stores a synchronized camera/video dataset alongside the live iPPG capture so the same session can be used later for model training.
