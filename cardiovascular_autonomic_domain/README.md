@@ -1,6 +1,6 @@
 # Cardiovascular and Autonomic Domain
 
-This directory implements section 1.1 to 1.7 from `ai_model_structure_abba_s.md`.
+This directory contains the cardiovascular and autonomic measurement stack for sections 1.1 to 1.7.
 
 Implemented outputs:
 - 1.1 Heart rate (HR / BPM)
@@ -33,19 +33,19 @@ Files:
 Recommended all-in-one entrypoint:
 
 ```powershell
-python .\HealthCare.py
+.\.venv\Scripts\python.exe .\cardiovascular_autonomic_domain\healthcare_app.py
 ```
 
 Desktop GUI entrypoint:
 
 ```powershell
-python .\HealthCare.py
+.\.venv\Scripts\python.exe .\cardiovascular_autonomic_domain\healthcare_app.py
 ```
 
 Offline camera rPPG extraction:
 
 ```powershell
-python .\run_camera_rppg_extraction.py --video .\cardiovascular_autonomic_domain\outputs\synthetic_camera_test\camera_rgb.mp4 --frame-csv .\cardiovascular_autonomic_domain\outputs\synthetic_camera_test\camera_frames.csv
+.\.venv\Scripts\python.exe .\cardiovascular_autonomic_domain\cli_tools.py camera-extract --video .\cardiovascular_autonomic_domain\outputs\synthetic_camera_test\camera_rgb.mp4 --frame-csv .\cardiovascular_autonomic_domain\outputs\synthetic_camera_test\camera_frames.csv
 ```
 
 The GUI supports:
@@ -86,21 +86,21 @@ Sequential 1.1 to 1.7 run with one final output block:
 Unified interactive serial runner:
 
 ```powershell
-python .\run_cardiovascular_measurement.py
+.\.venv\Scripts\python.exe .\cardiovascular_autonomic_domain\cli_tools.py measure
 ```
 
 Unified direct command example:
 
 ```powershell
-python .\run_cardiovascular_measurement.py --port COM5 --duration 60 --age 42 --sex female --calibration-sbp 118 --calibration-dbp 76
+.\.venv\Scripts\python.exe .\cardiovascular_autonomic_domain\cli_tools.py measure --port COM5 --duration 60 --age 42 --sex female --calibration-sbp 118 --calibration-dbp 76
 ```
 
 Arduino CLI compile examples:
 
 ```powershell
-& 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn arduino:renesas_uno:minima 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_cardiovascular_autonomic'
-& 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn arduino:renesas_uno:unor4wifi 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_cardiovascular_autonomic'
-& 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn esp32:esp32:esp32 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_esp32_dwkit_v4'
+arduino-cli compile --fqbn arduino:renesas_uno:minima .\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_cardiovascular_autonomic
+arduino-cli compile --fqbn arduino:renesas_uno:unor4wifi .\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_cardiovascular_autonomic
+arduino-cli compile --fqbn esp32:esp32:esp32 .\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_esp32_dwkit_v4
 ```
 
 ESP32-DWVKIT V4 wiring and upload:
@@ -109,7 +109,7 @@ ESP32-DWVKIT V4 wiring and upload:
 - Example upload command for a classic ESP32 Dev Module on `COM8`:
 
 ```powershell
-& 'C:\AI_HealthCare\tools\arduino-cli\arduino-cli.exe' compile --fqbn esp32:esp32:esp32 --upload -p COM8 'C:\AI_HealthCare\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_esp32_dwkit_v4'
+arduino-cli compile --fqbn esp32:esp32:esp32 --upload -p COM8 .\cardiovascular_autonomic_domain\arduino\psl_iPPG2C_esp32_dwkit_v4
 ```
 
 Smoke test without hardware:
@@ -130,3 +130,4 @@ Notes:
 - `camera_rppg_features.py` extracts classical camera rPPG candidate signals from recorded video using a face ROI or a center fallback ROI.
 - `camera_rppg_features.py` also runs `NeuroKit2` on the selected camera signal to refine HR and camera signal quality.
 - `multimodal_capture.py` stores a synchronized camera/video dataset alongside the live iPPG capture so the same session can be used later for model training.
+- The repository root is intentionally reduced so this directory remains the primary implementation area. Keep local `.venv` at the project root if you want to reuse the same interpreter.

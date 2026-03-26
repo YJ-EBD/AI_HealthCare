@@ -1,6 +1,0 @@
-{
-  "sample@example.com": {
-    "password": "change-me",
-    "api_key": "sk-REPLACE_WITH_REAL_OPENAI_API_KEY"
-  }
-}
