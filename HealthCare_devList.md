@@ -21,3 +21,5 @@
 17. Git 정리 원칙을 반영했습니다: `Face_AI/reference/`는 GitHub 업로드에서 영구 제외합니다.
 18. source control 안정성을 위해 `Face_AI/data/`, `Face_AI/inspection/`, `Face_AI/model/checkpoint/`, `Face_AI/executable/output/`, `__pycache__/`도 제외 처리했습니다.
 19. 코드, 문서, 실행 스크립트만 추적하도록 정리해 다른 디렉토리에 지장 없이 커밋 가능한 구조로 맞췄습니다.
+
+------AI Hub을 참고하여 머신러닝 기반 헬스케어 디바이스 제작 예정 --------
