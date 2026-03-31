@@ -23,3 +23,10 @@
 19. 코드, 문서, 실행 스크립트만 추적하도록 정리해 다른 디렉토리에 지장 없이 커밋 가능한 구조로 맞췄습니다.
 
 ------AI Hub을 참고하여 머신러닝 기반 헬스케어 디바이스 제작 예정 --------
+
+## 2026-03-31
+
+1. `.\.venv\Scripts\python.exe Face_AI\run.py --mode dataset-eval --skip-prepare`로 validation `1,391장` 전체를 다시 평가해 현재 CPU 기준 평균 metric accuracy `0.760704`를 확인했습니다.
+2. 최신 재실행 기준 세부 metric을 다시 점검했습니다: `dryness 0.971963`, `pigmentation 0.836333`, `pore 0.886167`, `sagging 0.654206`, `wrinkle 0.454851`.
+3. 생성 산출물은 계속 `Face_AI/executable/output/` 아래에서만 갱신되도록 유지했고, 해당 경로가 `Face_AI/.gitignore`로 제외되는 것을 재확인했습니다.
+4. source control 안전성도 함께 다시 확인했습니다: `reference/`, `data/`, `inspection/`, `model/checkpoint/`, `executable/output/`, `__pycache__/`는 계속 추적 제외 상태로 유지되어 다른 디렉토리에 영향 없이 정리 가능한 상태입니다.
