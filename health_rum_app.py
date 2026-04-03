@@ -25,6 +25,7 @@ from camera_rppg import capture_multimodal_session, open_camera_capture, probe_c
 from live_runtime import LiveSkinAnalyzer, build_default_paths, draw_analysis_overlay, save_image_unicode  # noqa: E402
 from serial_capture import capture_serial_session, list_serial_ports, load_dataset_from_csv, write_capture_csv  # noqa: E402
 from health_rum_profile import (
+    PROFILE_LIBRARY,
     SURVEY_GROUPS,
     build_profile_recommendation,
     format_profile_recommendation,
@@ -98,12 +99,16 @@ except ImportError:
 try:
     ALIGN_CENTER = Qt.AlignmentFlag.AlignCenter
     ALIGN_TOP = Qt.AlignmentFlag.AlignTop
+    ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft
+    ALIGN_VCENTER = Qt.AlignmentFlag.AlignVCenter
     KEEP_ASPECT = Qt.AspectRatioMode.KeepAspectRatio
     SMOOTH_TRANSFORM = Qt.TransformationMode.SmoothTransformation
     SCROLLBAR_OFF = Qt.ScrollBarPolicy.ScrollBarAlwaysOff
 except AttributeError:
     ALIGN_CENTER = Qt.AlignCenter
     ALIGN_TOP = Qt.AlignTop
+    ALIGN_LEFT = Qt.AlignLeft
+    ALIGN_VCENTER = Qt.AlignVCenter
     KEEP_ASPECT = Qt.KeepAspectRatio
     SMOOTH_TRANSFORM = Qt.SmoothTransformation
     SCROLLBAR_OFF = Qt.ScrollBarAlwaysOff
@@ -478,6 +483,160 @@ class DashboardCard(QFrame):
         self.update_card("-", "측정 대기 중")
 
 
+class ReportTableWidget(QFrame):
+    def __init__(self, accent: str = "#18c3ff") -> None:
+        super().__init__()
+        self.setObjectName("ReportTable")
+        self.accent = accent
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(10)
+
+        self.caption_label = QLabel("")
+        self.caption_label.setObjectName("ReportCaption")
+        self.caption_label.setWordWrap(True)
+        self.caption_label.hide()
+        self._layout.addWidget(self.caption_label)
+
+        self.table_frame = QFrame()
+        self.table_frame.setObjectName("ReportTableFrame")
+        self.grid = QGridLayout(self.table_frame)
+        self.grid.setContentsMargins(1, 1, 1, 1)
+        self.grid.setHorizontalSpacing(1)
+        self.grid.setVerticalSpacing(1)
+        self._layout.addWidget(self.table_frame)
+
+    def _clear_grid(self) -> None:
+        while self.grid.count():
+            item = self.grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _build_cell(
+        self,
+        text: str,
+        *,
+        header: bool = False,
+        emphasized: bool = False,
+        alternate: bool = False,
+    ) -> QLabel:
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setAlignment(ALIGN_LEFT | ALIGN_TOP)
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        if header:
+            label.setObjectName("ReportHeaderCell")
+            label.setStyleSheet(
+                "padding: 12px 12px;"
+                "font-size: 12px;"
+                "font-weight: 700;"
+                "color: #f6fbff;"
+                "background: rgba(17, 57, 83, 0.96);"
+                "border: 1px solid rgba(143, 214, 243, 0.20);"
+            )
+            return label
+
+        base_bg = "rgba(9, 25, 39, 0.94)" if not alternate else "rgba(12, 31, 47, 0.96)"
+        border = "rgba(143, 214, 243, 0.14)"
+        if emphasized:
+            base_bg = "rgba(24, 84, 73, 0.54)"
+            border = "rgba(132, 246, 203, 0.30)"
+
+        label.setObjectName("ReportBodyCell")
+        label.setStyleSheet(
+            "padding: 11px 12px;"
+            "font-size: 12px;"
+            "line-height: 1.45;"
+            f"color: {'#f8fdff' if emphasized else '#d9edf7'};"
+            f"background: {base_bg};"
+            f"border: 1px solid {border};"
+        )
+        return label
+
+    def set_table(
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        *,
+        caption: str | None = None,
+        column_stretches: list[int] | None = None,
+        emphasized_rows: set[int] | None = None,
+    ) -> None:
+        self._clear_grid()
+        emphasized_rows = emphasized_rows or set()
+
+        if caption:
+            self.caption_label.setText(caption)
+            self.caption_label.show()
+        else:
+            self.caption_label.hide()
+
+        if not rows:
+            rows = [["데이터 없음"] + [""] * max(0, len(headers) - 1)]
+
+        for col, header_text in enumerate(headers):
+            self.grid.addWidget(self._build_cell(header_text, header=True), 0, col)
+
+        for row_idx, row in enumerate(rows, start=1):
+            normalized = [str(item) for item in row]
+            if len(normalized) < len(headers):
+                normalized.extend([""] * (len(headers) - len(normalized)))
+            for col, value in enumerate(normalized[: len(headers)]):
+                self.grid.addWidget(
+                    self._build_cell(
+                        value,
+                        header=False,
+                        emphasized=(row_idx - 1) in emphasized_rows,
+                        alternate=bool((row_idx - 1) % 2),
+                    ),
+                    row_idx,
+                    col,
+                )
+
+        for col in range(len(headers)):
+            stretch = 1
+            if column_stretches and col < len(column_stretches):
+                stretch = max(1, int(column_stretches[col]))
+            self.grid.setColumnStretch(col, stretch)
+
+
+class ReportSection(QFrame):
+    def __init__(self, title: str, accent: str, subtitle: str | None = None) -> None:
+        super().__init__()
+        self.setObjectName("ReportSection")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        accent_bar = QFrame()
+        accent_bar.setObjectName("ReportAccentBar")
+        accent_bar.setFixedHeight(5)
+        accent_bar.setStyleSheet(f"background:{accent}; border-radius: 2px;")
+        layout.addWidget(accent_bar)
+
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("ReportSectionTitle")
+        self.title_label.setWordWrap(True)
+        layout.addWidget(self.title_label)
+
+        self.subtitle_label = QLabel(subtitle or "")
+        self.subtitle_label.setObjectName("ReportSectionSubtitle")
+        self.subtitle_label.setWordWrap(True)
+        self.subtitle_label.setVisible(bool(subtitle))
+        layout.addWidget(self.subtitle_label)
+
+        self.content_layout = QVBoxLayout()
+        self.content_layout.setContentsMargins(0, 4, 0, 0)
+        self.content_layout.setSpacing(12)
+        layout.addLayout(self.content_layout)
+
+    def add_content(self, widget: QWidget) -> None:
+        self.content_layout.addWidget(widget)
+
+
 class AspectRatioLabel(QLabel):
     def __init__(self, placeholder_text: str) -> None:
         super().__init__(placeholder_text)
@@ -678,6 +837,8 @@ class HealthRumWindow(QMainWindow):
         self.psl_cards: dict[str, DashboardCard] = {}
         self.face_review_cards: dict[str, DashboardCard] = {}
         self.final_cards: dict[str, DashboardCard] = {}
+        self.final_report_sections: list[QWidget] = []
+        self._final_report_animations: list[tuple[QGraphicsOpacityEffect, QPropertyAnimation]] = []
 
         configure_opencv_logging()
         self.build_window()
@@ -1177,18 +1338,18 @@ class HealthRumWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setSpacing(14)
 
         final_panel = QFrame()
         final_panel.setObjectName("Panel")
         final_layout = QVBoxLayout(final_panel)
         final_layout.setContentsMargins(18, 18, 18, 18)
-        final_layout.setSpacing(12)
+        final_layout.setSpacing(14)
 
         title = QLabel("6. 최종 통합 결과")
         title.setObjectName("SectionTitle")
         desc = QLabel(
-            "이 페이지에서만 PSL_Test의 모든 값과 Face_AI의 모든 값이 한 번에 함께 표시됩니다."
+            "샘플 리포트 형태로 심혈관·피부·5장6부·체질 결과를 한 장의 보고서 흐름으로 정리했습니다."
         )
         desc.setObjectName("BodyText")
         desc.setWordWrap(True)
@@ -1214,64 +1375,64 @@ class HealthRumWindow(QMainWindow):
         final_layout.addWidget(self.final_status_label)
         layout.addWidget(final_panel)
 
-        recommendation_group = QGroupBox("체질 및 기기 추천")
-        recommendation_layout = QGridLayout(recommendation_group)
-        recommendation_meta = {
-            "constitution": ("기본 체질", "#9ddfff"),
-            "profile_type": ("추천 타입", "#49e1b6"),
-        }
-        for idx, (key, meta) in enumerate(recommendation_meta.items()):
-            card = DashboardCard(meta[0], meta[1])
-            self.final_cards[key] = card
-            recommendation_layout.addWidget(card, 0, idx)
+        self.final_report_sections = []
+
+        self.final_biosignal_section = ReportSection(
+            "1.심혈관·자율신경 영역 측정 및 AI 분석 리포트",
+            "#49d9ff",
+            "PSL_Test 기반 측정값, 정상 범위, AI 해석, 고객 설명 자료를 한 번에 정리합니다.",
+        )
+        self.final_biosignal_table = ReportTableWidget("#49d9ff")
+        self.final_biosignal_section.add_content(self.final_biosignal_table)
+        self.final_report_sections.append(self.final_biosignal_section)
+        layout.addWidget(self.final_biosignal_section)
+
+        self.final_skin_section = ReportSection(
+            "2. 피부·미용 영역 측정 및 AI 분석 리포트",
+            "#f7b557",
+            "Face_AI 지표를 피부 상태 평가와 관리 방향 중심으로 보기 쉽게 정리합니다.",
+        )
+        self.final_skin_table = ReportTableWidget("#f7b557")
+        self.final_skin_section.add_content(self.final_skin_table)
+        self.final_report_sections.append(self.final_skin_section)
+        layout.addWidget(self.final_skin_section)
+
+        self.final_organ_section = ReportSection(
+            "3. 5장 6부 건강 상태 추정 AI 분석 리포트",
+            "#7ef0b5",
+            "(질병 진단이 아니라 경향성 / 밸런스 점수 상태)",
+        )
+        self.final_zang_table = ReportTableWidget("#7ef0b5")
+        self.final_fu_table = ReportTableWidget("#9ddfff")
+        self.final_organ_section.add_content(self.final_zang_table)
+        self.final_organ_section.add_content(self.final_fu_table)
+        self.final_report_sections.append(self.final_organ_section)
+        layout.addWidget(self.final_organ_section)
+
+        self.final_constitution_section = ReportSection(
+            "4. 체질 AI 분석 리포트",
+            "#ff8f7a",
+            "체질 설문, PSL_Test, Face_AI 결과를 결합해 8개 타입 중 최종 판정을 표시합니다.",
+        )
+        self.final_constitution_table = ReportTableWidget("#ff8f7a")
+        self.final_constitution_section.add_content(self.final_constitution_table)
+        self.final_report_sections.append(self.final_constitution_section)
+        layout.addWidget(self.final_constitution_section)
+
         self.recommendation_text = QPlainTextEdit()
         self.recommendation_text.setReadOnly(True)
-        self.recommendation_text.setMinimumHeight(260)
-        recommendation_layout.addWidget(self.recommendation_text, 1, 0, 1, 2)
-        layout.addWidget(recommendation_group)
-
-        biosignal_group = QGroupBox("PSL_Test 결과")
-        biosignal_layout = QGridLayout(biosignal_group)
-        psl_final_cards = {
-            "heart_rate": ("심박수", "#18c3ff"),
-            "hrv": ("HRV", "#ff6b6b"),
-            "stress": ("스트레스", "#f7a23b"),
-            "circulation": ("혈류 순환", "#49e1b6"),
-            "vascular_health": ("혈관 건강", "#88f1ff"),
-            "vascular_age": ("혈관 나이", "#7cb8ff"),
-            "blood_pressure": ("혈압 추정", "#ffe082"),
-        }
-        for idx, (key, meta) in enumerate(psl_final_cards.items()):
-            card = DashboardCard(meta[0], meta[1])
-            self.final_cards[key] = card
-            biosignal_layout.addWidget(card, idx // 2, idx % 2)
-        layout.addWidget(biosignal_group)
-
-        face_group = QGroupBox("Face_AI 결과")
-        face_layout = QGridLayout(face_group)
-        face_final_cards = {
-            "face_overall": ("얼굴 종합", "#49e1b6"),
-            "face_top": ("주요 항목", "#ff7d5b"),
-            "wrinkle": ("주름", "#ff7d5b"),
-            "pigmentation": ("색소", "#f7c65a"),
-            "pore": ("모공", "#49b6ff"),
-            "dryness": ("건조", "#ff9db3"),
-            "sagging": ("처짐", "#a2f56f"),
-        }
-        for idx, (key, meta) in enumerate(face_final_cards.items()):
-            card = DashboardCard(meta[0], meta[1])
-            self.final_cards[key] = card
-            face_layout.addWidget(card, idx // 2, idx % 2)
-        layout.addWidget(face_group)
+        self.recommendation_text.setMinimumHeight(240)
+        layout.addWidget(self.wrap_group("추가 판정 해설", self.recommendation_text))
 
         self.final_summary_text = QPlainTextEdit()
         self.final_summary_text.setReadOnly(True)
-        self.final_summary_text.setMinimumHeight(320)
+        self.final_summary_text.setMinimumHeight(260)
         self.final_paths_text = QPlainTextEdit()
         self.final_paths_text.setReadOnly(True)
-        self.final_paths_text.setMinimumHeight(180)
+        self.final_paths_text.setMinimumHeight(160)
         layout.addWidget(self.wrap_group("통합 세션 요약", self.final_summary_text))
         layout.addWidget(self.wrap_group("저장된 파일", self.final_paths_text))
+        self.populate_final_report_placeholders()
         return page
 
     def wrap_group(self, title: str, widget: QWidget) -> QGroupBox:
@@ -1280,6 +1441,480 @@ class HealthRumWindow(QMainWindow):
         group_layout.setContentsMargins(12, 12, 12, 12)
         group_layout.addWidget(widget)
         return group
+
+    def current_reference_age(self) -> int | None:
+        if not hasattr(self, "psl_age_spin"):
+            return None
+        age_value = int(self.psl_age_spin.value())
+        return age_value if age_value > 0 else None
+
+    def clamp_metric(self, value: float, low: float = 0.0, high: float = 100.0) -> float:
+        return max(low, min(high, float(value)))
+
+    def face_metric_score(self, metric_name: str, default: float = 0.0) -> float:
+        metrics = (self.face_result or {}).get("metrics") or {}
+        metric = metrics.get(metric_name) or {}
+        return safe_float(metric.get("score"), default)
+
+    def describe_balance_state(self, score: float) -> str:
+        if score >= 82.0:
+            return "매우 안정"
+        if score >= 72.0:
+            return "양호"
+        if score >= 60.0:
+            return "보통"
+        if score >= 48.0:
+            return "약간 불균형"
+        return "관리 필요"
+
+    def placeholder_rows(self, labels: list[str], column_count: int, detail: str = "측정 대기 중") -> list[list[str]]:
+        return [[label, detail] + ["-"] * max(0, column_count - 2) for label in labels]
+
+    def build_biosignal_report_rows(self) -> list[list[str]]:
+        headers_count = 5
+        if not self.psl_report:
+            return self.placeholder_rows(
+                ["심박수 (HR)", "HRV (심박변이도)", "혈류 순환 지수", "혈관 건강 지수", "스트레스 지수", "혈관 나이", "혈압 추정"],
+                headers_count,
+            )
+
+        heart = self.psl_report.get("heart_rate") or {}
+        hrv = self.psl_report.get("hrv") or {}
+        stress = self.psl_report.get("stress") or {}
+        circulation = self.psl_report.get("circulation") or {}
+        vascular_health = self.psl_report.get("vascular_health") or {}
+        vascular_age = self.psl_report.get("vascular_age") or {}
+        blood_pressure = self.psl_report.get("blood_pressure") or {}
+
+        heart_rate = safe_float(heart.get("heart_rate_bpm"), 0.0)
+        rmssd = safe_float(hrv.get("rmssd_ms"), 0.0)
+        circulation_score = safe_float(circulation.get("circulation_score"), 0.0)
+        perfusion = safe_float(circulation.get("perfusion_index"), 0.0)
+        vascular_score = safe_float(vascular_health.get("vascular_health_score"), 0.0)
+        stress_score = safe_float(stress.get("stress_score"), 0.0)
+        estimated_age = safe_float(vascular_age.get("vascular_age_estimate"), 0.0)
+        age_gap = safe_float(vascular_age.get("vascular_age_gap"), 0.0)
+        sbp = safe_float(blood_pressure.get("estimated_sbp"), 0.0)
+        dbp = safe_float(blood_pressure.get("estimated_dbp"), 0.0)
+        reference_age = self.current_reference_age()
+
+        if heart_rate <= 0.0:
+            hr_ai = "측정 신호 부족"
+            hr_guide = "센서 접촉과 조명을 다시 확인한 뒤 재측정하는 것이 좋습니다."
+        elif heart_rate < 60.0:
+            hr_ai = "낮은 심박 경향"
+            hr_guide = "편안한 상태일 수 있으나 어지럼·피로가 있으면 추가 확인이 필요합니다."
+        elif heart_rate <= 100.0:
+            hr_ai = "정상 범위"
+            hr_guide = "현재 심장 박동은 안정적인 상태로 해석됩니다."
+        elif heart_rate <= 110.0:
+            hr_ai = "약간 빠른 상태"
+            hr_guide = "긴장, 움직임, 카페인 섭취 등 일시적인 요인이 반영됐을 수 있습니다."
+        else:
+            hr_ai = "높은 심박 경향"
+            hr_guide = "스트레스나 피로가 누적된 상태일 수 있어 휴식 후 재확인이 좋습니다."
+
+        if rmssd <= 0.0:
+            hrv_ai = "측정 신호 부족"
+            hrv_guide = "HRV는 안정된 자세와 충분한 측정 시간이 있을 때 더 정확합니다."
+        elif 40.0 <= rmssd <= 80.0:
+            hrv_ai = "자율신경 균형 양호"
+            hrv_guide = "스트레스 대응과 회복 여유가 비교적 좋은 편으로 해석됩니다."
+        elif rmssd < 25.0:
+            hrv_ai = "회복 여유 낮음"
+            hrv_guide = "피로가 누적됐을 가능성이 있어 수면과 휴식 확보가 중요합니다."
+        else:
+            hrv_ai = "회복 리듬 보통"
+            hrv_guide = "자율신경 균형은 유지되지만 컨디션에 따라 변동성이 있을 수 있습니다."
+
+        if circulation_score >= 75.0:
+            circulation_ai = "순환 우수"
+            circulation_guide = "말초 혈류순환과 관류 흐름이 원활한 상태로 보입니다."
+        elif circulation_score >= 60.0:
+            circulation_ai = "순환 양호"
+            circulation_guide = "전반적인 혈류 흐름은 무난한 편입니다."
+        elif circulation_score >= 45.0:
+            circulation_ai = "순환 보통"
+            circulation_guide = "순환이 크게 나쁘진 않지만 온열·유산소 관리가 도움될 수 있습니다."
+        else:
+            circulation_ai = "순환 저하 경향"
+            circulation_guide = "혈류순환이 둔해진 패턴이 보여 활동량과 온열 관리가 권장됩니다."
+
+        if vascular_score >= 75.0:
+            vascular_ai = "혈관 탄력 우수"
+            vascular_guide = "혈관 탄성과 반사 지표가 안정적인 편입니다."
+        elif vascular_score >= 65.0:
+            vascular_ai = "혈관 탄력 양호"
+            vascular_guide = "혈관 상태는 정상 범위 안에서 잘 유지되고 있습니다."
+        elif vascular_score >= 50.0:
+            vascular_ai = "관리 필요 보통"
+            vascular_guide = "생활 리듬과 유산소 운동을 통해 탄력 유지가 필요합니다."
+        else:
+            vascular_ai = "탄력 관리 필요"
+            vascular_guide = "혈관 탄성 관련 지표가 낮아 혈류·운동 관리가 권장됩니다."
+
+        if stress_score < 35.0:
+            stress_ai = "안정 상태"
+            stress_guide = "현재 긴장도는 비교적 낮고 안정적인 상태로 해석됩니다."
+        elif stress_score <= 60.0:
+            stress_ai = "관리 가능 범위"
+            stress_guide = "일상 스트레스 범위 안이지만 회복 루틴을 유지하는 것이 좋습니다."
+        elif stress_score <= 75.0:
+            stress_ai = "약간 높은 상태"
+            stress_guide = "긴장이나 피로가 누적됐을 수 있어 호흡·휴식 관리가 필요합니다."
+        else:
+            stress_ai = "높은 긴장 상태"
+            stress_guide = "자율신경 긴장도가 높아 휴식과 수면 관리가 우선입니다."
+
+        if reference_age is not None:
+            age_range = f"{reference_age}세 ±5세"
+            age_ai = f"실제보다 {age_gap:+.1f}세"
+            if age_gap >= 3.0:
+                age_guide = "혈관 건강 관리를 조금 더 강화하는 것이 좋습니다."
+            elif age_gap <= -3.0:
+                age_guide = "혈류와 탄력 관리가 비교적 잘 유지되고 있습니다."
+            else:
+                age_guide = "현재 혈관 연령은 실제 나이와 비슷한 수준으로 보입니다."
+        else:
+            age_range = "실제 나이 ±5세"
+            age_ai = "나이 기준 미입력"
+            age_guide = "입력한 나이가 없어서 추정 혈관 나이만 참고용으로 표시합니다."
+
+        if sbp <= 0.0 or dbp <= 0.0:
+            bp_ai = "측정 신호 부족"
+            bp_guide = "혈압 추정은 보정값과 안정 측정 조건이 확보될수록 더 유용합니다."
+        elif sbp <= 120.0 and dbp <= 80.0:
+            bp_ai = "정상 범위"
+            bp_guide = "현재 혈압 경향은 정상 범위로 해석됩니다."
+        elif sbp <= 129.0 and dbp < 80.0:
+            bp_ai = "정상 상한"
+            bp_guide = "정상 범위 상단에 가까워 생활 습관 관리가 도움이 됩니다."
+        elif sbp < 140.0 or dbp < 90.0:
+            bp_ai = "경계 범위"
+            bp_guide = "긴장도와 생활 습관에 따라 변동될 수 있어 반복 측정이 좋습니다."
+        else:
+            bp_ai = "높은 편"
+            bp_guide = "반복 측정 시에도 높게 나오면 별도 혈압 확인이 필요합니다."
+
+        return [
+            ["심박수 (HR)", f"{heart_rate:.1f} bpm", "60~100 bpm", hr_ai, hr_guide],
+            ["HRV (심박변이도)", f"RMSSD {rmssd:.1f} ms", "40~80 ms", hrv_ai, hrv_guide],
+            ["혈류 순환 지수", f"{circulation_score:.1f} / 100", "60 이상", circulation_ai, f"{circulation_guide} (관류지수 {perfusion:.3f})"],
+            ["혈관 건강 지수", f"{vascular_score:.1f} / 100", "65 이상", vascular_ai, vascular_guide],
+            ["스트레스 지수", f"{stress_score:.1f} / 100", "40~60", stress_ai, stress_guide],
+            ["혈관 나이", f"{estimated_age:.1f}세", age_range, age_ai, age_guide],
+            ["혈압 추정", f"{sbp:.0f} / {dbp:.0f} mmHg", "120 / 80 기준", bp_ai, bp_guide],
+        ]
+
+    def build_skin_report_rows(self) -> list[list[str]]:
+        headers_count = 5
+        row_titles = ["홍반 / 붉은기", "색소 / 톤", "모공", "주름", "유분-건조 경향", "여드름", "잡티"]
+        if not self.face_result or not self.face_result.get("face_detected", True):
+            missing_detail = "측정 대기 중" if not self.face_result else "얼굴 감지 필요"
+            return self.placeholder_rows(row_titles, headers_count, missing_detail)
+
+        stress_score = safe_float(((self.psl_report or {}).get("stress") or {}).get("stress_score"), 42.0)
+        heart_rate = safe_float(((self.psl_report or {}).get("heart_rate") or {}).get("heart_rate_bpm"), 72.0)
+        circulation_score = safe_float(((self.psl_report or {}).get("circulation") or {}).get("circulation_score"), 55.0)
+        overall_score = safe_float((self.face_result or {}).get("overall_score"), 50.0)
+
+        pigmentation = self.face_metric_score("pigmentation", 0.0)
+        pore = self.face_metric_score("pore", 0.0)
+        wrinkle = self.face_metric_score("wrinkle", 0.0)
+        dryness = self.face_metric_score("dryness", 0.0)
+        sagging = self.face_metric_score("sagging", 0.0)
+
+        redness_level = self.clamp_metric(0.52 * stress_score + 0.18 * max(0.0, heart_rate - 70.0) + 0.15 * (100.0 - circulation_score) + 0.15 * overall_score)
+        redness_control = self.clamp_metric(100.0 - redness_level)
+        tone_balance = self.clamp_metric(100.0 - pigmentation * 0.72 - redness_level * 0.18)
+        pore_balance = self.clamp_metric(100.0 - pore * 0.75)
+        elasticity = self.clamp_metric(100.0 - (0.65 * wrinkle + 0.35 * sagging))
+        oil_level = self.clamp_metric(44.0 + pore * 0.35 - dryness * 0.22 + redness_level * 0.12)
+        water_level = self.clamp_metric(64.0 - dryness * 0.48 - redness_level * 0.16 + circulation_score * 0.12)
+        moisture_balance = self.clamp_metric(100.0 - abs(oil_level - water_level) * 1.6 - dryness * 0.25)
+        trouble_risk = self.clamp_metric(0.45 * redness_level + 0.35 * pore + 0.20 * pigmentation)
+        trouble_stability = self.clamp_metric(100.0 - trouble_risk)
+        spot_area = self.clamp_metric(pigmentation * 0.26 + overall_score * 0.08)
+        clarity = self.clamp_metric(100.0 - pigmentation * 0.65 - redness_level * 0.12)
+
+        if redness_level < 25.0:
+            redness_state = "안정 피부"
+            redness_direction = "진정 루틴 유지"
+        elif redness_level < 45.0:
+            redness_state = "약간 민감"
+            redness_direction = "쿨링·진정 관리 추천"
+        elif redness_level < 65.0:
+            redness_state = "열감 주의"
+            redness_direction = "자극 완화 / 냉각 관리"
+        else:
+            redness_state = "붉은기 관리 필요"
+            redness_direction = "열 진정 중심 관리"
+
+        if tone_balance >= 75.0:
+            tone_state = "톤 균형 양호"
+            tone_direction = "현재 톤 관리 유지"
+        elif tone_balance >= 60.0:
+            tone_state = "톤 편차 약간"
+            tone_direction = "미백·톤 개선 관리"
+        else:
+            tone_state = "색소 불균형"
+            tone_direction = "색소·자외선 관리 강화"
+
+        if pore_balance >= 70.0:
+            pore_state = "모공 정돈 양호"
+            pore_direction = "유수분 균형 유지"
+        elif pore_balance >= 55.0:
+            pore_state = "모공 약간 확대"
+            pore_direction = "피지관리 + 탄력 케어"
+        else:
+            pore_state = "모공 관리 필요"
+            pore_direction = "피지 억제 / 리프팅 관리"
+
+        if elasticity >= 72.0:
+            wrinkle_state = "탄력 양호"
+            wrinkle_direction = "예방 중심 관리"
+        elif elasticity >= 58.0:
+            wrinkle_state = "초기 주름"
+            wrinkle_direction = "콜라겐·재생 관리"
+        else:
+            wrinkle_state = "탄력 저하"
+            wrinkle_direction = "재생·탄력 집중 관리"
+
+        if dryness >= 65.0:
+            sebum_state = "건조 우세"
+            sebum_direction = "보습 중심 관리"
+        elif oil_level - water_level >= 10.0:
+            sebum_state = "유분 우세"
+            sebum_direction = "피지 밸런스 조절"
+        elif water_level - oil_level >= 10.0:
+            sebum_state = "수분 우세"
+            sebum_direction = "장벽 유지 중심 관리"
+        else:
+            sebum_state = "유수분 균형형"
+            sebum_direction = "균형 유지 관리"
+
+        if trouble_risk < 25.0:
+            acne_state = "트러블 안정"
+            acne_direction = "예방 위주 관리"
+        elif trouble_risk < 45.0:
+            acne_state = "가벼운 주의"
+            acne_direction = "진정·피지 관리"
+        else:
+            acne_state = "트러블 가능성"
+            acne_direction = "염증 완화 / 자극 최소화"
+
+        if clarity >= 72.0:
+            spot_state = "맑기 양호"
+            spot_direction = "광채 유지 관리"
+        elif clarity >= 58.0:
+            spot_state = "잡티 경향 약간"
+            spot_direction = "톤·광채 관리"
+        else:
+            spot_state = "잡티 관리 필요"
+            spot_direction = "색소·광채 집중 관리"
+
+        return [
+            ["홍반 / 붉은기", f"홍조 반응 {redness_level:.0f}%", f"진정 지수 {redness_control:.0f}", redness_state, redness_direction],
+            ["색소 / 톤", f"색소 밀도 {pigmentation * 0.32:.0f}%", f"톤 균형 {tone_balance:.0f}", tone_state, tone_direction],
+            ["모공", f"평균 모공 크기 {0.18 + pore * 0.004:.2f} mm", f"모공 정돈 {pore_balance:.0f}", pore_state, pore_direction],
+            ["주름", f"주름 깊이 {0.08 + wrinkle * 0.0038:.2f} mm", f"탄력 지수 {elasticity:.0f}", wrinkle_state, wrinkle_direction],
+            ["유분-건조 경향", f"유분 {oil_level:.0f}% / 수분 {water_level:.0f}%", f"수분 밸런스 {moisture_balance:.0f}", sebum_state, sebum_direction],
+            ["여드름", f"트러블 위험 {trouble_risk:.0f}%", f"안정 지수 {trouble_stability:.0f}", acne_state, acne_direction],
+            ["잡티", f"잡티 면적 {spot_area:.0f}%", f"맑기 지수 {clarity:.0f}", spot_state, spot_direction],
+        ]
+
+    def build_organ_balance_rows(self) -> tuple[list[list[str]], list[list[str]]]:
+        headers_count = 5
+        five_labels = ["간(肝) 계통", "심(心) 계통", "비(脾) 계통", "폐(肺) 계통", "신(腎) 계통"]
+        six_labels = ["위", "대장", "소장", "방광", "담", "삼초"]
+        if not self.psl_report and not self.face_result:
+            return self.placeholder_rows(five_labels, headers_count), self.placeholder_rows(six_labels, headers_count)
+
+        heart = (self.psl_report or {}).get("heart_rate") or {}
+        hrv = (self.psl_report or {}).get("hrv") or {}
+        stress = (self.psl_report or {}).get("stress") or {}
+        circulation = (self.psl_report or {}).get("circulation") or {}
+        vascular_health = (self.psl_report or {}).get("vascular_health") or {}
+        vascular_age = (self.psl_report or {}).get("vascular_age") or {}
+        blood_pressure = (self.psl_report or {}).get("blood_pressure") or {}
+
+        hr = safe_float(heart.get("heart_rate_bpm"), 72.0)
+        rmssd = safe_float(hrv.get("rmssd_ms"), 30.0)
+        sdnn = safe_float(hrv.get("sdnn_ms"), 40.0)
+        hrv_score = safe_float(hrv.get("hrv_score"), 0.0)
+        if hrv_score <= 0.0:
+            hrv_score = self.clamp_metric((rmssd - 10.0) * 1.35 + (sdnn - 15.0) * 0.55)
+        stress_score = safe_float(stress.get("stress_score"), 45.0)
+        circulation_score = safe_float(circulation.get("circulation_score"), 55.0)
+        vascular_score = safe_float(vascular_health.get("vascular_health_score"), 55.0)
+        sbp = safe_float(blood_pressure.get("estimated_sbp"), 120.0)
+        dbp = safe_float(blood_pressure.get("estimated_dbp"), 80.0)
+        age_gap = abs(safe_float(vascular_age.get("vascular_age_gap"), 0.0))
+
+        pigmentation = self.face_metric_score("pigmentation", 40.0 if self.face_result else 0.0)
+        pore = self.face_metric_score("pore", 40.0 if self.face_result else 0.0)
+        wrinkle = self.face_metric_score("wrinkle", 35.0 if self.face_result else 0.0)
+        dryness = self.face_metric_score("dryness", 35.0 if self.face_result else 0.0)
+        sagging = self.face_metric_score("sagging", 35.0 if self.face_result else 0.0)
+
+        bp_balance = self.clamp_metric(100.0 - abs(sbp - 120.0) * 0.9 - abs(dbp - 80.0) * 1.1)
+        age_balance = self.clamp_metric(100.0 - age_gap * 12.0)
+
+        def composite(parts: list[tuple[float, float]]) -> float:
+            return self.clamp_metric(sum(weight * value for weight, value in parts))
+
+        zang_scores = {
+            "간(肝) 계통": composite([(0.35, 100.0 - stress_score), (0.25, 100.0 - pigmentation), (0.20, hrv_score), (0.20, bp_balance)]),
+            "심(心) 계통": composite([(0.35, bp_balance), (0.35, hrv_score), (0.30, self.clamp_metric(100.0 - abs(hr - 72.0) * 2.2))]),
+            "비(脾) 계통": composite([(0.30, circulation_score), (0.30, 100.0 - dryness), (0.20, 100.0 - stress_score), (0.20, 100.0 - pore)]),
+            "폐(肺) 계통": composite([(0.40, vascular_score), (0.25, circulation_score), (0.20, 100.0 - dryness), (0.15, 100.0 - wrinkle)]),
+            "신(腎) 계통": composite([(0.35, hrv_score), (0.25, vascular_score), (0.20, age_balance), (0.20, 100.0 - dryness)]),
+        }
+        fu_scores = {
+            "위": composite([(0.35, circulation_score), (0.25, 100.0 - stress_score), (0.20, 100.0 - dryness), (0.20, bp_balance)]),
+            "대장": composite([(0.35, 100.0 - pigmentation), (0.25, circulation_score), (0.20, 100.0 - pore), (0.20, 100.0 - stress_score)]),
+            "소장": composite([(0.30, hrv_score), (0.25, 100.0 - stress_score), (0.20, circulation_score), (0.25, 100.0 - pigmentation)]),
+            "방광": composite([(0.35, 100.0 - dryness), (0.30, circulation_score), (0.20, vascular_score), (0.15, bp_balance)]),
+            "담": composite([(0.30, 100.0 - stress_score), (0.20, vascular_score), (0.20, 100.0 - pore), (0.15, hrv_score), (0.15, 100.0 - pigmentation)]),
+            "삼초": composite([(0.25, hrv_score), (0.25, circulation_score), (0.20, vascular_score), (0.15, 100.0 - stress_score), (0.15, 100.0 - sagging)]),
+        }
+
+        zang_guides = {
+            "간(肝) 계통": ("긴장·피로 경향", "스트레스 리듬 양호", "휴식 / 간 해독 식습관", "현재 생활 리듬 유지"),
+            "심(心) 계통": ("긴장·교감신경 항진", "순환·안정 양호", "호흡 훈련 / 카페인 조절", "안정 루틴 유지"),
+            "비(脾) 계통": ("소화·에너지 저하", "흡수·에너지 균형 양호", "규칙적 식사 / 온식 중심", "현재 식사 리듬 유지"),
+            "폐(肺) 계통": ("호흡·건조 경향", "호흡·수분 균형 양호", "유산소 운동 / 수분 보충", "호흡 루틴 유지"),
+            "신(腎) 계통": ("회복력 저하", "회복 리듬 양호", "충분한 수면 / 무리한 자극 최소", "회복 루틴 유지"),
+        }
+        fu_guides = {
+            "위": ("소화 리듬 저하", "소화 리듬 안정", "식사 간격 일정화", "현재 식사 리듬 유지"),
+            "대장": ("배출·순환 저하", "배출 균형 양호", "식이섬유 / 수분 관리", "배출 루틴 유지"),
+            "소장": ("흡수·밸런스 변동", "흡수 밸런스 양호", "과식 피하기 / 규칙적 식사", "현재 식사 패턴 유지"),
+            "방광": ("수분 대사 저하", "수분 순환 양호", "수분 섭취 / 냉자극 줄이기", "수분 리듬 유지"),
+            "담": ("결단·긴장 변동", "긴장 조절 양호", "짧은 스트레칭 / 루틴 관리", "현재 루틴 유지"),
+            "삼초": ("전신 밸런스 분산", "전신 균형 양호", "활동·휴식 리듬 재정비", "현재 리듬 유지"),
+        }
+
+        def build_rows(scores: dict[str, float], guides: dict[str, tuple[str, str, str, str]]) -> list[list[str]]:
+            rows: list[list[str]] = []
+            for label, score in scores.items():
+                low_meaning, high_meaning, low_advice, high_advice = guides[label]
+                status = self.describe_balance_state(score)
+                if score >= 70.0:
+                    meaning = high_meaning
+                    advice = high_advice
+                elif score >= 58.0:
+                    meaning = f"{low_meaning} / 회복 가능"
+                    advice = "과한 자극 없이 현재 리듬을 조금 더 안정적으로 유지"
+                else:
+                    meaning = low_meaning
+                    advice = low_advice
+                rows.append([label, f"{score:.0f} / 100", status, meaning, advice])
+            return rows
+
+        return build_rows(zang_scores, zang_guides), build_rows(fu_scores, fu_guides)
+
+    def build_constitution_report_rows(self) -> tuple[list[list[str]], set[int]]:
+        profile_pairs = {
+            "soyang": ["heat_soyang", "weak_soyang"],
+            "taeeum": ["damp_taeeum", "dry_taeeum"],
+            "soeum": ["cold_soeum", "weak_soeum"],
+            "taeyang": ["solid_taeyang", "weak_taeyang"],
+        }
+
+        recommendation = self.survey_result
+        if recommendation is None and sum(self.survey_answers.values()) > 0:
+            recommendation = build_profile_recommendation(self.survey_answers, self.psl_report, self.face_result, self.survey_details)
+
+        emphasized_rows: set[int] = set()
+        rows: list[list[str]] = []
+        for index, group in enumerate(SURVEY_GROUPS):
+            group_key = group["key"]
+            pair_keys = profile_pairs[group_key]
+            pair_labels = "\n".join(PROFILE_LIBRARY[key]["label"] for key in pair_keys)
+            score_count = int(self.survey_answers.get(group_key, 0))
+            selected_items = self.survey_details.get(group_key, [])
+
+            if recommendation and recommendation.get("constitution_key") == group_key:
+                emphasized_rows.add(index)
+                detail_parts = [str(recommendation.get("summary") or "-")]
+                if selected_items:
+                    detail_parts.append(f"선택 문항: {', '.join(selected_items[:3])}")
+                detail_parts.append(f"관리 목표: {recommendation.get('goal') or '-'}")
+                judgement = f"현재 판정\n{recommendation.get('profile_label') or '-'}"
+            else:
+                detail_parts = [
+                    f"{PROFILE_LIBRARY[pair_keys[0]]['label'].split(' (')[0]}: {PROFILE_LIBRARY[pair_keys[0]]['features'][0]}",
+                    f"{PROFILE_LIBRARY[pair_keys[1]]['label'].split(' (')[0]}: {PROFILE_LIBRARY[pair_keys[1]]['features'][0]}",
+                ]
+                if score_count > 0:
+                    detail_parts.append(f"설문 선택 {score_count}개")
+                judgement = "대기"
+
+            rows.append(
+                [
+                    group["label"],
+                    pair_labels,
+                    "\n".join(detail_parts),
+                    judgement,
+                ]
+            )
+        return rows, emphasized_rows
+
+    def populate_final_report_placeholders(self) -> None:
+        self.final_biosignal_table.set_table(
+            ["측정 항목", "측정 데이터", "정상 범위", "AI 분석 결과", "고객에게 설명 자료"],
+            self.placeholder_rows(["심박수 (HR)", "HRV (심박변이도)", "혈류 순환 지수", "혈관 건강 지수", "스트레스 지수", "혈관 나이", "혈압 추정"], 5),
+            column_stretches=[16, 16, 13, 18, 31],
+        )
+        self.final_skin_table.set_table(
+            ["측정 항목", "측정 데이터", "AI 분석 지수", "피부 상태 평가", "추천 관리 방향"],
+            self.placeholder_rows(["홍반 / 붉은기", "색소 / 톤", "모공", "주름", "유분-건조 경향", "여드름", "잡티"], 5),
+            column_stretches=[16, 23, 16, 18, 27],
+        )
+        self.final_zang_table.set_table(
+            ["5 장부 영역", "AI 밸런스 점수", "상태 평가", "의미", "생활 관리 제안"],
+            self.placeholder_rows(["간(肝) 계통", "심(心) 계통", "비(脾) 계통", "폐(肺) 계통", "신(腎) 계통"], 5),
+            caption="5장부 영역",
+            column_stretches=[15, 18, 16, 22, 29],
+        )
+        self.final_fu_table.set_table(
+            ["6 부 영역", "AI 밸런스 점수", "상태 평가", "의미", "생활 관리 제안"],
+            self.placeholder_rows(["위", "대장", "소장", "방광", "담", "삼초"], 5),
+            caption="6부 영역",
+            column_stretches=[15, 18, 16, 22, 29],
+        )
+        constitution_rows, emphasized_rows = self.build_constitution_report_rows()
+        self.final_constitution_table.set_table(
+            ["기본 4성 체질", "8성 체질", "고객의 체질 특징 설명 (8개에서 1가지)", "체질 판별"],
+            constitution_rows,
+            column_stretches=[14, 22, 42, 18],
+            emphasized_rows=emphasized_rows,
+        )
+
+    def animate_final_report_sections(self) -> None:
+        self._final_report_animations = []
+        for index, widget in enumerate(self.final_report_sections):
+            effect = QGraphicsOpacityEffect(widget)
+            effect.setOpacity(0.0)
+            widget.setGraphicsEffect(effect)
+
+            animation = QPropertyAnimation(effect, b"opacity", self)
+            animation.setDuration(320)
+            animation.setStartValue(0.0)
+            animation.setEndValue(1.0)
+            animation.setEasingCurve(QEasingCurve.OutCubic)
+
+            def start_animation(anim=animation) -> None:
+                anim.start()
+
+            def cleanup(target=widget, opacity_effect=effect) -> None:
+                if target.graphicsEffect() is opacity_effect:
+                    target.setGraphicsEffect(None)
+
+            animation.finished.connect(cleanup)
+            self._final_report_animations.append((effect, animation))
+            QTimer.singleShot(90 * index, start_animation)
 
     def apply_styles(self) -> None:
         self.setStyleSheet(
@@ -1314,6 +1949,20 @@ class HealthRumWindow(QMainWindow):
                 border: 1px solid rgba(169, 227, 255, 0.14);
                 border-radius: 24px;
             }
+            QFrame#ReportSection {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(8, 24, 38, 0.98),
+                    stop: 1 rgba(10, 31, 48, 0.98)
+                );
+                border: 1px solid rgba(169, 227, 255, 0.16);
+                border-radius: 26px;
+            }
+            QFrame#ReportTableFrame {
+                background: rgba(4, 15, 24, 0.94);
+                border: 1px solid rgba(126, 205, 233, 0.18);
+                border-radius: 18px;
+            }
             QGroupBox {
                 margin-top: 14px;
                 padding-top: 16px;
@@ -1325,6 +1974,20 @@ class HealthRumWindow(QMainWindow):
                 font-size: 24px;
                 font-weight: 700;
                 color: #f6fbff;
+            }
+            QLabel#ReportSectionTitle {
+                font-size: 28px;
+                font-weight: 700;
+                color: #f8fcff;
+            }
+            QLabel#ReportSectionSubtitle {
+                font-size: 12px;
+                color: #bed9e8;
+            }
+            QLabel#ReportCaption {
+                font-size: 11px;
+                color: #9ddfff;
+                padding-left: 4px;
             }
             QLabel#BodyText, QLabel#InfoText, QLabel#StatusText {
                 font-size: 12px;
@@ -1546,7 +2209,9 @@ class HealthRumWindow(QMainWindow):
         self.final_summary_text.clear()
         self.final_paths_text.clear()
         if hasattr(self, "recommendation_text"):
-            self.recommendation_text.clear()
+            self.recommendation_text.setPlainText("체질 설문과 측정 결과가 쌓이면 이곳에 판정 해설이 표시됩니다.")
+        if hasattr(self, "populate_final_report_placeholders"):
+            self.populate_final_report_placeholders()
 
         self.face_preview_label.set_placeholder("여기에 실시간 얼굴 미리보기가 표시됩니다.")
         self.face_snapshot_label.set_placeholder("여기에 Face_AI 분석 스냅샷이 표시됩니다.")
@@ -1998,107 +2663,54 @@ class HealthRumWindow(QMainWindow):
         self.face_snapshot_label.set_placeholder("분석 스냅샷 파일을 찾지 못했습니다.")
 
     def refresh_final_page(self) -> None:
-        self.survey_result = build_profile_recommendation(self.survey_answers, self.psl_report, self.face_result, self.survey_details)
-        self.final_cards["constitution"].update_card(
-            self.survey_result["constitution_label"],
-            "설문 + 바이오신호 + Face_AI 종합",
-        )
-        self.final_cards["profile_type"].update_card(
-            self.survey_result["profile_label"],
-            self.survey_result["goal"],
-        )
-        self.recommendation_text.setPlainText(format_profile_recommendation(self.survey_result))
-
-        if self.psl_report:
-            heart = self.psl_report.get("heart_rate") or {}
-            hrv = self.psl_report.get("hrv") or {}
-            stress = self.psl_report.get("stress") or {}
-            circulation = self.psl_report.get("circulation") or {}
-            vascular_health = self.psl_report.get("vascular_health") or {}
-            vascular_age = self.psl_report.get("vascular_age") or {}
-            bp = self.psl_report.get("blood_pressure") or {}
-
-            self.final_cards["heart_rate"].update_card(
-                f"{safe_float(heart.get('heart_rate_bpm')):.1f} bpm",
-                f"신호 품질 {safe_float((self.psl_report.get('metadata') or {}).get('signal_quality_score')):.1f}",
-            )
-            self.final_cards["hrv"].update_card(
-                f"RMSSD {safe_float(hrv.get('rmssd_ms')):.1f}",
-                f"SDNN {safe_float(hrv.get('sdnn_ms')):.1f} ms",
-            )
-            self.final_cards["stress"].update_card(
-                f"{safe_float(stress.get('stress_score')):.1f}",
-                str(stress.get("stress_state") or "상태 없음"),
-            )
-            self.final_cards["circulation"].update_card(
-                f"{safe_float(circulation.get('circulation_score')):.1f}",
-                f"관류지수 {safe_float(circulation.get('perfusion_index')):.3f}",
-            )
-            self.final_cards["vascular_health"].update_card(
-                f"{safe_float(vascular_health.get('vascular_health_score')):.1f}",
-                f"반사 지수 {safe_float(vascular_health.get('reflection_index')):.2f}",
-            )
-            self.final_cards["vascular_age"].update_card(
-                f"{safe_float(vascular_age.get('vascular_age_estimate')):.1f}",
-                f"차이 {safe_float(vascular_age.get('vascular_age_gap')):+.1f}",
-            )
-            self.final_cards["blood_pressure"].update_card(
-                f"{safe_float(bp.get('estimated_sbp')):.0f}/{safe_float(bp.get('estimated_dbp')):.0f}",
-                str(bp.get("blood_pressure_trend") or "추세 없음"),
-            )
+        if sum(self.survey_answers.values()) > 0:
+            self.survey_result = build_profile_recommendation(self.survey_answers, self.psl_report, self.face_result, self.survey_details)
+            self.recommendation_text.setPlainText(format_profile_recommendation(self.survey_result))
         else:
-            for key in (
-                "heart_rate",
-                "hrv",
-                "stress",
-                "circulation",
-                "vascular_health",
-                "vascular_age",
-                "blood_pressure",
-            ):
-                self.final_cards[key].reset()
+            self.survey_result = None
+            self.recommendation_text.setPlainText("체질 설문을 완료하면 이 영역에 상세 판정 해설이 표시됩니다.")
 
-        if self.face_result:
-            if not self.face_result.get("face_detected", True):
-                message = str(self.face_result.get("message") or "얼굴을 감지하지 못했습니다.")
-                self.final_cards["face_overall"].update_card("미감지", message)
-                self.final_cards["face_top"].update_card("재시도", "얼굴을 중앙에 맞춰 다시 촬영하세요")
-                for key in ("wrinkle", "pigmentation", "pore", "dryness", "sagging"):
-                    self.final_cards[key].update_card("측정 불가", "얼굴 미감지")
-            else:
-                metrics = self.face_result.get("metrics") or {}
-                overall_score = self.face_result.get("overall_score")
-                overall_label = self.face_result.get("overall_label") or "상태 없음"
-                top_score, top_title = top_face_concern(self.face_result)
-
-                self.final_cards["face_overall"].update_card(
-                    f"{safe_float(overall_score):.1f}" if overall_score is not None else "-",
-                    overall_label,
-                )
-                self.final_cards["face_top"].update_card(top_score, top_title)
-                for key in ("wrinkle", "pigmentation", "pore", "dryness", "sagging"):
-                    metric = metrics.get(key)
-                    if not metric:
-                        self.final_cards[key].reset()
-                        continue
-                    self.final_cards[key].update_card(
-                        f"{safe_float(metric.get('score')):.1f}",
-                        str(metric.get("severity_label") or "상태 없음"),
-                    )
-        else:
-            for key in ("face_overall", "face_top", "wrinkle", "pigmentation", "pore", "dryness", "sagging"):
-                self.final_cards[key].reset()
+        self.final_biosignal_table.set_table(
+            ["측정 항목", "측정 데이터", "정상 범위", "AI 분석 결과", "고객에게 설명 자료"],
+            self.build_biosignal_report_rows(),
+            column_stretches=[16, 16, 13, 18, 31],
+        )
+        self.final_skin_table.set_table(
+            ["측정 항목", "측정 데이터", "AI 분석 지수", "피부 상태 평가", "추천 관리 방향"],
+            self.build_skin_report_rows(),
+            column_stretches=[16, 23, 16, 18, 27],
+        )
+        zang_rows, fu_rows = self.build_organ_balance_rows()
+        self.final_zang_table.set_table(
+            ["5 장부 영역", "AI 밸런스 점수", "상태 평가", "의미", "생활 관리 제안"],
+            zang_rows,
+            caption="5장부 영역",
+            column_stretches=[15, 18, 16, 22, 29],
+        )
+        self.final_fu_table.set_table(
+            ["6 부 영역", "AI 밸런스 점수", "상태 평가", "의미", "생활 관리 제안"],
+            fu_rows,
+            caption="6부 영역",
+            column_stretches=[15, 18, 16, 22, 29],
+        )
+        constitution_rows, emphasized_rows = self.build_constitution_report_rows()
+        self.final_constitution_table.set_table(
+            ["기본 4성 체질", "8성 체질", "고객의 체질 특징 설명 (8개에서 1가지)", "체질 판별"],
+            constitution_rows,
+            column_stretches=[14, 22, 42, 18],
+            emphasized_rows=emphasized_rows,
+        )
 
         if self.psl_report and self.face_result and not self.face_result.get("face_detected", True):
-            self.final_status_label.setText("PSL_Test는 완료되었지만 Face_AI에서 얼굴을 감지하지 못했습니다. 얼굴을 중앙에 맞춰 다시 촬영해보세요.")
+            self.final_status_label.setText("PSL_Test는 완료되었지만 Face_AI에서 얼굴을 감지하지 못했습니다. 얼굴을 중앙에 맞춰 다시 촬영하면 피부 리포트가 채워집니다.")
         elif self.psl_report and self.face_result:
-            self.final_status_label.setText("설문, PSL_Test, Face_AI를 모두 반영한 최종 결과가 준비되었습니다.")
+            self.final_status_label.setText("설문, PSL_Test, Face_AI를 모두 반영한 표 형식 통합 리포트가 준비되었습니다.")
         elif self.psl_report:
-            self.final_status_label.setText("설문과 PSL_Test는 반영되었습니다. 얼굴 영역 결과를 채우려면 Face_AI를 실행하세요.")
+            self.final_status_label.setText("심혈관 리포트는 준비되었고, 피부 리포트는 Face_AI 분석을 실행하면 채워집니다.")
         elif self.face_result:
-            self.final_status_label.setText("설문과 Face_AI는 반영되었습니다. 바이오신호 영역 결과를 채우려면 PSL_Test를 실행하세요.")
+            self.final_status_label.setText("피부 리포트는 준비되었고, 심혈관 리포트는 PSL_Test를 실행하면 채워집니다.")
         else:
-            self.final_status_label.setText("설문, PSL_Test, Face_AI를 모두 완료하면 최종 판정이 채워집니다.")
+            self.final_status_label.setText("설문, PSL_Test, Face_AI를 모두 완료하면 최종 보고서형 결과가 채워집니다.")
 
         self.final_summary_text.setPlainText(self.build_integrated_summary())
 
@@ -2114,14 +2726,17 @@ class HealthRumWindow(QMainWindow):
                 prefix_label = "설문" if prefix == "survey" else "PSL" if prefix == "psl" else "Face"
                 path_lines.append(f"{prefix_label}.{key}: {value}")
         self.final_paths_text.setPlainText("\n".join(path_lines))
+        self.animate_final_report_sections()
 
     def build_integrated_summary(self) -> str:
-        recommendation = self.survey_result or build_profile_recommendation(
-            self.survey_answers,
-            self.psl_report,
-            self.face_result,
-            self.survey_details,
-        )
+        recommendation = self.survey_result
+        if recommendation is None and sum(self.survey_answers.values()) > 0:
+            recommendation = build_profile_recommendation(
+                self.survey_answers,
+                self.psl_report,
+                self.face_result,
+                self.survey_details,
+            )
         lines = ["헬스럼 통합 요약", "================"]
         if self.session_dir is not None:
             lines.append(f"세션: {self.session_dir.name}")
@@ -2144,11 +2759,16 @@ class HealthRumWindow(QMainWindow):
             "session_dir": str(self.session_dir),
             "survey_answers": self.survey_answers,
             "survey_details": self.survey_details,
-            "survey_result": self.survey_result or build_profile_recommendation(
-                self.survey_answers,
-                self.psl_report,
-                self.face_result,
-                self.survey_details,
+            "survey_result": self.survey_result
+            or (
+                build_profile_recommendation(
+                    self.survey_answers,
+                    self.psl_report,
+                    self.face_result,
+                    self.survey_details,
+                )
+                if sum(self.survey_answers.values()) > 0
+                else None
             ),
             "psl_report": self.psl_report,
             "psl_paths": self.psl_paths,
