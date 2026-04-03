@@ -1,4 +1,0 @@
-venv=.venv (Python 3.14.3)
-numpy==2.4.3
-pyserial==3.5
-arduino-cli==1.4.1

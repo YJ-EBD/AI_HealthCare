@@ -4,5 +4,11 @@ __pycache__/
 Face_AI/reference/
 cardiovascular_autonomic_domain/outputs/
 cardiovascular_autonomic_domain/app_data/
+Health_rum_outputs/
+PSL_Data/
+PSL_Test/outputs/
+PSL_Test/app_data/
+PSL_Test/__pycache__/
+PSL_Test/arduino/**/build/
 typea_left_box_edges_preview.png
 users.local.json

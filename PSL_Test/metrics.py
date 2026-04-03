@@ -28,7 +28,19 @@ class SignalDataset:
 
 
 def clamp(value: float, low: float, high: float) -> float:
-    return max(low, min(high, value))
+    return max(low, min(high, float(value)))
+
+
+def integrate_trapezoid(y: np.ndarray, x: np.ndarray | None = None, dx: float = 1.0) -> float:
+    if hasattr(np, "trapezoid"):
+        if x is not None:
+            return float(np.trapezoid(y, x))
+        return float(np.trapezoid(y, dx=dx))
+    if hasattr(np, "trapz"):
+        if x is not None:
+            return float(np.trapz(y, x))
+        return float(np.trapz(y, dx=dx))
+    return 0.0
 
 
 def safe_mean(values: np.ndarray) -> float:
@@ -52,20 +64,20 @@ def normalize_signal(signal: np.ndarray) -> np.ndarray:
     signal = np.asarray(signal, dtype=float)
     if signal.size == 0:
         return signal
-    signal = signal - np.median(signal)
-    scale = np.percentile(np.abs(signal), 95)
+    centered = signal - np.median(signal)
+    scale = np.percentile(np.abs(centered), 95)
     if scale <= EPSILON:
-        scale = np.std(signal)
+        scale = np.std(centered)
     if scale <= EPSILON:
-        return np.zeros_like(signal)
-    return signal / scale
+        return np.zeros_like(centered)
+    return centered / scale
 
 
 def estimate_sample_rate(timestamps_s: np.ndarray) -> float:
     if timestamps_s.size < 2:
         return 0.0
-    diffs = np.diff(timestamps_s)
-    diffs = diffs[diffs > 0]
+    diffs = np.diff(np.asarray(timestamps_s, dtype=float))
+    diffs = diffs[np.isfinite(diffs) & (diffs > 0.0)]
     if diffs.size == 0:
         return 0.0
     return float(1.0 / np.median(diffs))
@@ -82,7 +94,7 @@ def moving_average(signal: np.ndarray, window_samples: int) -> np.ndarray:
 
 def one_pole_lowpass(signal: np.ndarray, sample_rate_hz: float, cutoff_hz: float) -> np.ndarray:
     signal = np.asarray(signal, dtype=float)
-    if signal.size == 0 or cutoff_hz <= 0.0 or sample_rate_hz <= 0.0:
+    if signal.size == 0 or sample_rate_hz <= 0.0 or cutoff_hz <= 0.0:
         return signal.copy()
     dt = 1.0 / sample_rate_hz
     rc = 1.0 / (2.0 * math.pi * cutoff_hz)
@@ -96,7 +108,7 @@ def one_pole_lowpass(signal: np.ndarray, sample_rate_hz: float, cutoff_hz: float
 
 def one_pole_highpass(signal: np.ndarray, sample_rate_hz: float, cutoff_hz: float) -> np.ndarray:
     signal = np.asarray(signal, dtype=float)
-    if signal.size == 0 or cutoff_hz <= 0.0 or sample_rate_hz <= 0.0:
+    if signal.size == 0 or sample_rate_hz <= 0.0 or cutoff_hz <= 0.0:
         return signal.copy()
     dt = 1.0 / sample_rate_hz
     rc = 1.0 / (2.0 * math.pi * cutoff_hz)
@@ -118,19 +130,24 @@ def zero_phase_filter(
     passes: int = 2,
 ) -> np.ndarray:
     filtered = np.asarray(signal, dtype=float)
-    for _ in range(max(passes, 1)):
-        if mode == "lowpass":
-            filtered = one_pole_lowpass(filtered, sample_rate_hz, cutoff_hz)
-            filtered = one_pole_lowpass(filtered[::-1], sample_rate_hz, cutoff_hz)[::-1]
-        elif mode == "highpass":
+    for _ in range(max(int(passes), 1)):
+        if mode == "highpass":
             filtered = one_pole_highpass(filtered, sample_rate_hz, cutoff_hz)
             filtered = one_pole_highpass(filtered[::-1], sample_rate_hz, cutoff_hz)[::-1]
+        elif mode == "lowpass":
+            filtered = one_pole_lowpass(filtered, sample_rate_hz, cutoff_hz)
+            filtered = one_pole_lowpass(filtered[::-1], sample_rate_hz, cutoff_hz)[::-1]
         else:
             raise ValueError(f"Unsupported filter mode: {mode}")
     return filtered
 
 
-def bandpass_filter(signal: np.ndarray, sample_rate_hz: float, low_hz: float = 0.5, high_hz: float = 4.0) -> np.ndarray:
+def bandpass_filter(
+    signal: np.ndarray,
+    sample_rate_hz: float,
+    low_hz: float = 0.5,
+    high_hz: float = 4.0,
+) -> np.ndarray:
     filtered = zero_phase_filter(signal, sample_rate_hz, low_hz, mode="highpass", passes=2)
     filtered = zero_phase_filter(filtered, sample_rate_hz, high_hz, mode="lowpass", passes=2)
     return moving_average(filtered, max(1, int(sample_rate_hz * 0.03)))
@@ -141,7 +158,6 @@ def detect_systolic_peaks(filtered_ppg: np.ndarray, sample_rate_hz: float) -> np
     if filtered_ppg.size < 3 or sample_rate_hz <= 0.0:
         return np.array([], dtype=int)
 
-    derivative = np.diff(filtered_ppg, prepend=filtered_ppg[0])
     local_maxima = np.where(
         (filtered_ppg[1:-1] > filtered_ppg[:-2]) & (filtered_ppg[1:-1] >= filtered_ppg[2:])
     )[0] + 1
@@ -150,17 +166,13 @@ def detect_systolic_peaks(filtered_ppg: np.ndarray, sample_rate_hz: float) -> np
 
     min_distance = max(1, int(sample_rate_hz * 0.33))
     dynamic_threshold = max(
-        np.percentile(filtered_ppg, 65),
+        float(np.percentile(filtered_ppg, 65)),
         float(np.median(filtered_ppg) + 0.35 * np.std(filtered_ppg)),
     )
 
     selected: list[int] = []
     for peak_index in local_maxima:
         if filtered_ppg[peak_index] < dynamic_threshold:
-            continue
-        left = max(0, peak_index - min_distance // 2)
-        right = min(filtered_ppg.size, peak_index + min_distance // 2 + 1)
-        if derivative[peak_index] < -0.02 and filtered_ppg[peak_index] < np.max(filtered_ppg[left:right]):
             continue
         if not selected:
             selected.append(int(peak_index))
@@ -172,9 +184,9 @@ def detect_systolic_peaks(filtered_ppg: np.ndarray, sample_rate_hz: float) -> np
             selected.append(int(peak_index))
 
     if len(selected) >= 3:
-        return np.array(selected, dtype=int)
+        return np.asarray(selected, dtype=int)
 
-    relaxed_threshold = np.percentile(filtered_ppg, 55)
+    relaxed_threshold = float(np.percentile(filtered_ppg, 55))
     selected.clear()
     for peak_index in local_maxima:
         if filtered_ppg[peak_index] < relaxed_threshold:
@@ -183,19 +195,19 @@ def detect_systolic_peaks(filtered_ppg: np.ndarray, sample_rate_hz: float) -> np
             selected.append(int(peak_index))
         elif filtered_ppg[peak_index] > filtered_ppg[selected[-1]]:
             selected[-1] = int(peak_index)
-    return np.array(selected, dtype=int)
+    return np.asarray(selected, dtype=int)
 
 
 def detect_beats_from_aux_channel(beat_signal: np.ndarray | None, sample_rate_hz: float) -> np.ndarray:
     if beat_signal is None or sample_rate_hz <= 0.0:
-        return np.array([], dtype=int)
+        return np.asarray([], dtype=int)
     beat_signal = np.asarray(beat_signal, dtype=float)
     if beat_signal.size < 3:
-        return np.array([], dtype=int)
+        return np.asarray([], dtype=int)
     low = float(np.percentile(beat_signal, 20))
     high = float(np.percentile(beat_signal, 80))
     if math.isclose(low, high, abs_tol=EPSILON):
-        return np.array([], dtype=int)
+        return np.asarray([], dtype=int)
     threshold = low + (high - low) * 0.55
     above = beat_signal >= threshold
     rising_edges = np.where(~above[:-1] & above[1:])[0] + 1
@@ -204,37 +216,33 @@ def detect_beats_from_aux_channel(beat_signal: np.ndarray | None, sample_rate_hz
     for edge_index in rising_edges:
         if not selected or edge_index - selected[-1] >= min_distance:
             selected.append(int(edge_index))
-    return np.array(selected, dtype=int)
+    return np.asarray(selected, dtype=int)
 
 
 def find_onsets(filtered_ppg: np.ndarray, peak_indices: np.ndarray, sample_rate_hz: float) -> np.ndarray:
     if peak_indices.size == 0:
-        return np.array([], dtype=int)
+        return np.asarray([], dtype=int)
     search_back = max(1, int(sample_rate_hz * 0.45))
     onsets: list[int] = []
     last_onset = 0
     for peak_index in peak_indices:
-        start = max(last_onset, peak_index - search_back)
+        start = max(last_onset, int(peak_index) - search_back)
         if start >= peak_index:
-            onset = max(0, peak_index - 1)
+            onset = max(0, int(peak_index) - 1)
         else:
-            local_segment = filtered_ppg[start : peak_index + 1]
-            onset = start + int(np.argmin(local_segment))
+            segment = filtered_ppg[start : int(peak_index) + 1]
+            onset = start + int(np.argmin(segment))
         if onsets and onset <= onsets[-1]:
             onset = onsets[-1] + 1
         onsets.append(min(onset, int(peak_index)))
         last_onset = onset
-    return np.array(onsets, dtype=int)
+    return np.asarray(onsets, dtype=int)
 
 
-def build_average_pulse(
-    filtered_ppg: np.ndarray,
-    onset_indices: np.ndarray,
-    target_length: int = 200,
-) -> np.ndarray | None:
+def build_average_pulse(filtered_ppg: np.ndarray, onset_indices: np.ndarray, target_length: int = 200) -> np.ndarray | None:
     if onset_indices.size < 3:
         return None
-    normalized_beats: list[np.ndarray] = []
+    beats: list[np.ndarray] = []
     for beat_index in range(onset_indices.size - 1):
         start = int(onset_indices[beat_index])
         end = int(onset_indices[beat_index + 1])
@@ -248,10 +256,10 @@ def build_average_pulse(
         beat = beat / peak_value
         old_axis = np.linspace(0.0, 1.0, beat.size)
         new_axis = np.linspace(0.0, 1.0, target_length)
-        normalized_beats.append(np.interp(new_axis, old_axis, beat))
-    if not normalized_beats:
+        beats.append(np.interp(new_axis, old_axis, beat))
+    if not beats:
         return None
-    return np.mean(np.vstack(normalized_beats), axis=0)
+    return np.mean(np.vstack(beats), axis=0)
 
 
 def extract_pulse_features(
@@ -271,17 +279,14 @@ def extract_pulse_features(
         peak = int(peak_indices[beat_index])
         if not (onset < peak < next_onset):
             continue
-
         beat_wave = filtered_ppg[onset:next_onset]
         baseline = float(filtered_ppg[onset])
         amplitude = float(filtered_ppg[peak] - baseline)
         rise_time_s = float((peak - onset) / sample_rate_hz)
-        area = float(np.trapezoid(np.maximum(beat_wave - baseline, 0.0), dx=1.0 / sample_rate_hz))
+        area = integrate_trapezoid(np.maximum(beat_wave - baseline, 0.0), dx=1.0 / sample_rate_hz)
         duration_s = float((next_onset - onset) / sample_rate_hz)
-
         if amplitude <= EPSILON or rise_time_s <= 0.0 or duration_s <= 0.0:
             continue
-
         amplitudes.append(amplitude)
         rise_times_s.append(rise_time_s)
         areas.append(area)
@@ -311,12 +316,56 @@ def calculate_hr_metrics(peak_indices: np.ndarray, sample_rate_hz: float) -> dic
             "ibi_mean_ms": 0.0,
             "ibi_median_ms": 0.0,
         }
-
     rr_intervals_ms = np.diff(peak_indices) / sample_rate_hz * 1000.0
     return {
         "heart_rate_bpm": float(60000.0 / np.mean(rr_intervals_ms)),
         "ibi_mean_ms": float(np.mean(rr_intervals_ms)),
         "ibi_median_ms": float(np.median(rr_intervals_ms)),
+    }
+
+
+def calculate_frequency_hrv(peak_indices: np.ndarray, sample_rate_hz: float) -> dict[str, float]:
+    if peak_indices.size < 4 or sample_rate_hz <= 0.0:
+        return {
+            "lf_power": 0.0,
+            "hf_power": 0.0,
+            "lf_hf_ratio": 0.0,
+        }
+
+    rr_s = np.diff(peak_indices) / sample_rate_hz
+    rr_s = rr_s[np.isfinite(rr_s) & (rr_s > 0.0)]
+    if rr_s.size < 3:
+        return {
+            "lf_power": 0.0,
+            "hf_power": 0.0,
+            "lf_hf_ratio": 0.0,
+        }
+
+    rr_time = np.cumsum(rr_s)
+    rr_time = np.insert(rr_time[:-1], 0, 0.0)
+    interp_fs = 4.0
+    uniform_time = np.arange(rr_time[0], rr_time[-1], 1.0 / interp_fs)
+    if uniform_time.size < 8:
+        return {
+            "lf_power": 0.0,
+            "hf_power": 0.0,
+            "lf_hf_ratio": 0.0,
+        }
+    interp_rr = np.interp(uniform_time, rr_time, rr_s)
+    interp_rr = interp_rr - np.mean(interp_rr)
+
+    fft_values = np.fft.rfft(interp_rr)
+    freqs = np.fft.rfftfreq(interp_rr.size, d=1.0 / interp_fs)
+    power = (np.abs(fft_values) ** 2) / max(interp_rr.size, 1)
+
+    lf_mask = (freqs >= 0.04) & (freqs < 0.15)
+    hf_mask = (freqs >= 0.15) & (freqs < 0.40)
+    lf_power = integrate_trapezoid(power[lf_mask], freqs[lf_mask]) if np.any(lf_mask) else 0.0
+    hf_power = integrate_trapezoid(power[hf_mask], freqs[hf_mask]) if np.any(hf_mask) else 0.0
+    return {
+        "lf_power": lf_power,
+        "hf_power": hf_power,
+        "lf_hf_ratio": float(lf_power / max(hf_power, EPSILON)),
     }
 
 
@@ -326,6 +375,9 @@ def calculate_hrv_metrics(peak_indices: np.ndarray, sample_rate_hz: float) -> di
             "sdnn_ms": 0.0,
             "rmssd_ms": 0.0,
             "pnn50": 0.0,
+            "lf_power": 0.0,
+            "hf_power": 0.0,
+            "lf_hf_ratio": 0.0,
             "hrv_score": 0.0,
             "autonomic_balance_index": 0.0,
             "autonomic_balance_state": "데이터 부족",
@@ -337,11 +389,14 @@ def calculate_hrv_metrics(peak_indices: np.ndarray, sample_rate_hz: float) -> di
     rmssd_ms = math.sqrt(float(np.mean(np.square(rr_diff_ms)))) if rr_diff_ms.size else 0.0
     pnn50 = 100.0 * float(np.mean(np.abs(rr_diff_ms) > 50.0)) if rr_diff_ms.size else 0.0
     heart_rate_bpm = float(60000.0 / np.mean(rr_intervals_ms))
+    freq_hrv = calculate_frequency_hrv(peak_indices, sample_rate_hz)
 
     rmssd_score = clamp((rmssd_ms - 10.0) / 50.0 * 100.0, 0.0, 100.0)
     sdnn_score = clamp((sdnn_ms - 15.0) / 55.0 * 100.0, 0.0, 100.0)
     pnn50_score = clamp(pnn50 / 25.0 * 100.0, 0.0, 100.0)
-    hrv_score = 0.45 * rmssd_score + 0.35 * sdnn_score + 0.20 * pnn50_score
+    lf_hf_ratio = float(freq_hrv["lf_hf_ratio"])
+    balance_score = clamp(100.0 - abs(lf_hf_ratio - 1.5) / 2.5 * 100.0, 0.0, 100.0)
+    hrv_score = 0.35 * rmssd_score + 0.30 * sdnn_score + 0.15 * pnn50_score + 0.20 * balance_score
 
     parasympathetic_ratio = rmssd_ms / max(heart_rate_bpm, 1.0)
     autonomic_balance_index = clamp(50.0 + (parasympathetic_ratio - 0.45) * 120.0, 0.0, 100.0)
@@ -356,6 +411,9 @@ def calculate_hrv_metrics(peak_indices: np.ndarray, sample_rate_hz: float) -> di
         "sdnn_ms": float(sdnn_ms),
         "rmssd_ms": float(rmssd_ms),
         "pnn50": float(pnn50),
+        "lf_power": float(freq_hrv["lf_power"]),
+        "hf_power": float(freq_hrv["hf_power"]),
+        "lf_hf_ratio": float(freq_hrv["lf_hf_ratio"]),
         "hrv_score": float(hrv_score),
         "autonomic_balance_index": float(autonomic_balance_index),
         "autonomic_balance_state": autonomic_balance_state,
@@ -366,21 +424,22 @@ def calculate_stress_metrics(heart_rate_bpm: float, hrv_metrics: dict[str, float
     rmssd_ms = float(hrv_metrics["rmssd_ms"])
     sdnn_ms = float(hrv_metrics["sdnn_ms"])
     pnn50 = float(hrv_metrics["pnn50"])
+    lf_hf_ratio = float(hrv_metrics["lf_hf_ratio"])
 
     hr_component = clamp((heart_rate_bpm - 62.0) / 28.0 * 100.0, 0.0, 100.0)
     rmssd_component = clamp((40.0 - rmssd_ms) / 30.0 * 100.0, 0.0, 100.0)
     sdnn_component = clamp((45.0 - sdnn_ms) / 30.0 * 100.0, 0.0, 100.0)
     pnn50_component = clamp((15.0 - pnn50) / 15.0 * 100.0, 0.0, 100.0)
-    sympathetic_ratio = heart_rate_bpm / max(rmssd_ms, 1.0)
-    ratio_component = clamp((sympathetic_ratio - 1.8) / 1.3 * 100.0, 0.0, 100.0)
+    lf_hf_component = clamp((lf_hf_ratio - 1.5) / 2.0 * 100.0, 0.0, 100.0)
 
     stress_score = (
-        0.30 * hr_component
-        + 0.30 * rmssd_component
+        0.25 * hr_component
+        + 0.25 * rmssd_component
         + 0.20 * sdnn_component
         + 0.10 * pnn50_component
-        + 0.10 * ratio_component
+        + 0.20 * lf_hf_component
     )
+    stress_score = float(clamp(stress_score, 0.0, 100.0))
 
     if stress_score < 33.0:
         stress_state = "안정"
@@ -390,7 +449,7 @@ def calculate_stress_metrics(heart_rate_bpm: float, hrv_metrics: dict[str, float
         stress_state = "긴장"
 
     return {
-        "stress_score": float(clamp(stress_score, 0.0, 100.0)),
+        "stress_score": stress_score,
         "stress_state": stress_state,
     }
 
@@ -443,7 +502,6 @@ def calculate_circulation_metrics(
         weight_sum += 0.15
 
     circulation_score = weighted_total / weight_sum
-
     return {
         "circulation_score": float(circulation_score),
         "median_amplitude": float(np.median(amplitudes)),
@@ -455,10 +513,7 @@ def calculate_circulation_metrics(
     }
 
 
-def calculate_vascular_health_metrics(
-    average_pulse: np.ndarray | None,
-    pulse_features: dict[str, Any],
-) -> dict[str, float | None]:
+def calculate_vascular_health_metrics(average_pulse: np.ndarray | None, pulse_features: dict[str, Any]) -> dict[str, float | None]:
     if average_pulse is None or average_pulse.size < 20:
         return {
             "vascular_health_score": 0.0,
@@ -469,7 +524,6 @@ def calculate_vascular_health_metrics(
 
     rise_times_s = pulse_features["rise_times_s"]
     cycle_durations_s = pulse_features["cycle_durations_s"]
-
     systolic_limit = max(5, int(average_pulse.size * 0.45))
     systolic_peak_index = int(np.argmax(average_pulse[:systolic_limit]))
 
@@ -522,7 +576,7 @@ def calculate_vascular_age_metrics(
     circulation_metrics: dict[str, float | bool | None],
     vascular_health_metrics: dict[str, float | None],
     pulse_features: dict[str, Any],
-) -> dict[str, float | int | None]:
+) -> dict[str, float | int]:
     chronological_age = user_profile.age if user_profile.age is not None else 45
     sex_adjustment = 1.5 if user_profile.sex.lower() == "male" else -1.0 if user_profile.sex.lower() == "female" else 0.0
 
@@ -555,7 +609,7 @@ def calculate_blood_pressure_metrics(
     heart_rate_bpm: float,
     circulation_metrics: dict[str, float | bool | None],
     vascular_health_metrics: dict[str, float | None],
-    vascular_age_metrics: dict[str, float | int | None],
+    vascular_age_metrics: dict[str, float | int],
     pulse_features: dict[str, Any],
 ) -> dict[str, float | str | bool]:
     base_sbp = float(user_profile.calibration_sbp) if user_profile.calibration_sbp is not None else 120.0
@@ -563,12 +617,11 @@ def calculate_blood_pressure_metrics(
 
     reflection_index = float(vascular_health_metrics["reflection_index"] or 0.40)
     perfusion_index = float(circulation_metrics.get("perfusion_index", 0.45) or 0.45)
-
     rise_times_s = pulse_features["rise_times_s"]
     cycle_durations_s = pulse_features["cycle_durations_s"]
     median_rise_ratio = float(np.median(rise_times_s / np.maximum(cycle_durations_s, EPSILON))) if rise_times_s.size else 0.28
-
     age_delta = float(vascular_age_metrics["vascular_age_gap"])
+
     stiffness_term = (0.28 - median_rise_ratio) / 0.08
     reflection_term = (reflection_index - 0.40) / 0.18
     hr_term = (heart_rate_bpm - 70.0) / 15.0
@@ -580,7 +633,6 @@ def calculate_blood_pressure_metrics(
 
     estimated_sbp = clamp(base_sbp + delta_sbp, 85.0, 180.0)
     estimated_dbp = clamp(base_dbp + delta_dbp, 50.0, 120.0)
-
     if delta_sbp > 5.0 or delta_dbp > 4.0:
         trend = "상승 추세"
     elif delta_sbp < -5.0 or delta_dbp < -4.0:
@@ -593,91 +645,4 @@ def calculate_blood_pressure_metrics(
         "estimated_dbp": float(estimated_dbp),
         "blood_pressure_trend": trend,
         "calibrated": user_profile.calibration_sbp is not None and user_profile.calibration_dbp is not None,
-    }
-
-
-def analyze_dataset(dataset: SignalDataset, user_profile: UserProfile | None = None) -> dict[str, Any]:
-    if user_profile is None:
-        user_profile = UserProfile()
-
-    sample_rate_hz = dataset.sample_rate_hz or estimate_sample_rate(dataset.timestamps_s)
-    if sample_rate_hz <= 0.0:
-        raise ValueError("데이터셋에서 샘플링 주파수를 계산하지 못했습니다.")
-
-    warnings: list[str] = []
-    raw_ppg = np.asarray(dataset.ppg, dtype=float)
-    filtered_ppg = bandpass_filter(raw_ppg, sample_rate_hz, low_hz=0.5, high_hz=4.0)
-    filtered_ppg = filtered_ppg - np.mean(filtered_ppg)
-
-    peak_indices = detect_systolic_peaks(filtered_ppg, sample_rate_hz)
-    beat_source = "ppg_peak_detection"
-    if peak_indices.size < 3:
-        fallback_peaks = detect_beats_from_aux_channel(dataset.beat, sample_rate_hz)
-        if fallback_peaks.size >= 3:
-            peak_indices = fallback_peaks
-            beat_source = "beat_channel_fallback"
-            warnings.append("PPG 피크 검출이 약해 보조 비트 채널을 대신 사용했습니다.")
-
-    if peak_indices.size < 3:
-        raise ValueError("HRV와 혈관 지표를 계산하기에 충분한 박동을 검출하지 못했습니다.")
-
-    onset_indices = find_onsets(filtered_ppg, peak_indices, sample_rate_hz)
-    pulse_features = extract_pulse_features(filtered_ppg, peak_indices, onset_indices, sample_rate_hz)
-    average_pulse = build_average_pulse(filtered_ppg, onset_indices)
-
-    heart_rate_metrics = calculate_hr_metrics(peak_indices, sample_rate_hz)
-    hrv_metrics = calculate_hrv_metrics(peak_indices, sample_rate_hz)
-    stress_metrics = calculate_stress_metrics(float(heart_rate_metrics["heart_rate_bpm"]), hrv_metrics)
-    circulation_metrics = calculate_circulation_metrics(pulse_features, filtered_ppg, dataset.aux)
-    vascular_health_metrics = calculate_vascular_health_metrics(average_pulse, pulse_features)
-    vascular_age_metrics = calculate_vascular_age_metrics(
-        user_profile,
-        float(heart_rate_metrics["heart_rate_bpm"]),
-        hrv_metrics,
-        circulation_metrics,
-        vascular_health_metrics,
-        pulse_features,
-    )
-    blood_pressure_metrics = calculate_blood_pressure_metrics(
-        user_profile,
-        float(heart_rate_metrics["heart_rate_bpm"]),
-        circulation_metrics,
-        vascular_health_metrics,
-        vascular_age_metrics,
-        pulse_features,
-    )
-
-    if not circulation_metrics["aux_channel_available"]:
-        warnings.append("현재 단일 PPG 하드웨어에서는 좌우 채널 차이 항목을 계산할 수 없습니다.")
-    if not blood_pressure_metrics["calibrated"]:
-        warnings.append("개인 커프 보정값이 없어 혈압 결과는 추세 중심 참고값입니다.")
-    if user_profile.age is None:
-        warnings.append("나이가 입력되지 않아 혈관 나이는 기본 기준 나이 45세를 사용했습니다.")
-
-    duration_s = float(dataset.timestamps_s[-1] - dataset.timestamps_s[0]) if dataset.timestamps_s.size >= 2 else 0.0
-    signal_quality_score = calculate_signal_quality(raw_ppg, filtered_ppg)
-    if signal_quality_score < 35.0:
-        warnings.append("신호 품질이 낮습니다. 센서를 다시 밀착하고 손가락 움직임을 줄여주세요.")
-
-    return {
-        "metadata": {
-            "sample_rate_hz": float(sample_rate_hz),
-            "sample_count": int(raw_ppg.size),
-            "duration_s": duration_s,
-            "signal_quality_score": float(signal_quality_score),
-            "beat_detection_source": beat_source,
-        },
-        "heart_rate": {
-            "heart_rate_bpm": float(heart_rate_metrics["heart_rate_bpm"]),
-            "peak_count": int(peak_indices.size),
-            "ibi_mean_ms": float(heart_rate_metrics["ibi_mean_ms"]),
-            "ibi_median_ms": float(heart_rate_metrics["ibi_median_ms"]),
-        },
-        "hrv": hrv_metrics,
-        "stress": stress_metrics,
-        "circulation": circulation_metrics,
-        "vascular_health": vascular_health_metrics,
-        "vascular_age": vascular_age_metrics,
-        "blood_pressure": blood_pressure_metrics,
-        "warnings": warnings,
     }

@@ -30,3 +30,14 @@
 2. 최신 재실행 기준 세부 metric을 다시 점검했습니다: `dryness 0.971963`, `pigmentation 0.836333`, `pore 0.886167`, `sagging 0.654206`, `wrinkle 0.454851`.
 3. 생성 산출물은 계속 `Face_AI/executable/output/` 아래에서만 갱신되도록 유지했고, 해당 경로가 `Face_AI/.gitignore`로 제외되는 것을 재확인했습니다.
 4. source control 안전성도 함께 다시 확인했습니다: `reference/`, `data/`, `inspection/`, `model/checkpoint/`, `executable/output/`, `__pycache__/`는 계속 추적 제외 상태로 유지되어 다른 디렉토리에 영향 없이 정리 가능한 상태입니다.
+
+## 2026-04-03
+
+1. `PSL_Test/` 기반 양산형 프로토타입을 추가했습니다. `PSL_iPPG2C + Arduino UNO + 4K 카메라` 흐름으로 `HR`, `HRV`, 혈류 순환, 혈관 건강, 스트레스, 혈관 나이, 혈압 추정을 계산하도록 구성했습니다.
+2. Arduino UNO 스케치 `PSL_Test/arduino/psl_iPPG2C_uno/psl_iPPG2C_uno.ino`를 기준으로 `1000000 baud` 고정 시리얼 수집 경로를 맞췄고, 실제 보드 업로드 후 `RAW,...` 포맷 수집까지 점검했습니다.
+3. `PSL_Test`에서 단독 PPG, 카메라+PPG 멀티모달 수집, CSV 재분석, 결과 리포트 저장 흐름을 `PySide6/PyQt5` UI와 함께 동작하도록 정리했습니다.
+4. `Health_rum.py`, `health_rum_app.py`, `health_rum_profile.py`를 추가해 `900x1440` 통합 UI를 구축했습니다. 시작, 체질 설문, PSL_Test, 얼굴 촬영, 얼굴 분석 확인, 최종 결과의 다단계 흐름으로 재구성했습니다.
+5. 전체 UI를 한국어로 정리하고 레이아웃, 버튼, 카드, 카메라 프리뷰 비율, 최종 요약 패널을 손봤으며, 페이지 전환 애니메이션과 미래지향적인 대시보드 스타일을 적용했습니다.
+6. Face_AI 연동부에 보조 얼굴 감지 fallback, JSON 직렬화 안정화, OpenCV 카메라 경고 억제, 최종 결과 페이지 반영 로직을 추가해 실제 세션 결과가 누락되지 않도록 보완했습니다.
+7. 체질 설문은 기존 그룹 단위 선택에서 `문항별 다중 선택` 방식으로 개편했습니다. 체크된 항목 수와 세부 선택 목록이 최종 체질 판정과 기기 추천에 직접 반영되며, 최종 요약과 JSON export에도 함께 저장됩니다.
+8. 로컬 산출물과 데이터 폴더가 Source Control에 불필요하게 잡히지 않도록 `.gitignore`를 확장했습니다. `Health_rum_outputs/`, `PSL_Data/`, `PSL_Test/outputs/`, `PSL_Test/app_data/` 등 실행 산출물은 Git 추적에서 제외했습니다.

@@ -1,0 +1,6 @@
+numpy
+pyserial
+opencv-python
+PySide6
+PyQt5
+neurokit2

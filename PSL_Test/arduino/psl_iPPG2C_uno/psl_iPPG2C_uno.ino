@@ -1,43 +1,44 @@
-// PSL-iPPG2C -> Arduino UNO R4 (Minima / WiFi)
+// PSL-iPPG2C -> Arduino UNO
 //
 // Wiring
-//   iPPG2C 5V   -> UNO R4 5V
-//   iPPG2C GND  -> UNO R4 GND
-//   iPPG2C PPG  -> UNO R4 A0
-//   iPPG2C Beat -> UNO R4 A1
+//   iPPG2C 5V   -> UNO 5V
+//   iPPG2C GND  -> UNO GND
+//   iPPG2C PPG  -> UNO A0
+//   iPPG2C Beat -> UNO A1
 //
 // Serial monitor: 1000000 baud
 // Output:
 //   RAW,<ms>,<sample>,<ppg_raw>,<beat_raw>,<ppg_v>,<beat_v>
 //   BEAT,<ms>,<sample>,<bpm>,<ibi_ms>
-
-#include <Arduino.h>
+//
+// This sketch follows the signal structure shown in PSL_Data Arduino examples,
+// but uses a micros()-based scheduler so it can compile on classic Arduino UNO
+// without extra timer libraries.
 
 constexpr uint8_t PIN_PPG = A0;
 constexpr uint8_t PIN_BEAT = A1;
-constexpr uint8_t PIN_HEART_LED = LED_BUILTIN;
+constexpr uint8_t PIN_HEART_LED = 13;
 
-constexpr uint32_t SERIAL_BAUD = 1000000;
-constexpr uint32_t SAMPLE_RATE_HZ = 200;
-constexpr uint32_t SAMPLE_PERIOD_US = 1000000UL / SAMPLE_RATE_HZ;
+constexpr unsigned long SERIAL_BAUD = 1000000UL;
+constexpr unsigned long SAMPLE_RATE_HZ = 250UL;
+constexpr unsigned long SAMPLE_PERIOD_US = 1000000UL / SAMPLE_RATE_HZ;
 
-constexpr uint8_t ADC_BITS = 14;
-constexpr uint32_t ADC_MAX_COUNTS = (1UL << ADC_BITS) - 1UL;
 constexpr float ADC_REF_V = 5.0f;
+constexpr unsigned int ADC_MAX_COUNTS = 1023U;
 
-constexpr float BEAT_THRESHOLD_HIGH_V = 1.75f;
+constexpr float BEAT_THRESHOLD_HIGH_V = 1.65f;
 constexpr float BEAT_THRESHOLD_LOW_V = 1.55f;
-constexpr uint32_t BEAT_THRESHOLD_HIGH = (uint32_t)((BEAT_THRESHOLD_HIGH_V / ADC_REF_V) * ADC_MAX_COUNTS + 0.5f);
-constexpr uint32_t BEAT_THRESHOLD_LOW = (uint32_t)((BEAT_THRESHOLD_LOW_V / ADC_REF_V) * ADC_MAX_COUNTS + 0.5f);
+constexpr unsigned int BEAT_THRESHOLD_HIGH = (unsigned int)((BEAT_THRESHOLD_HIGH_V / ADC_REF_V) * ADC_MAX_COUNTS + 0.5f);
+constexpr unsigned int BEAT_THRESHOLD_LOW = (unsigned int)((BEAT_THRESHOLD_LOW_V / ADC_REF_V) * ADC_MAX_COUNTS + 0.5f);
 
-static uint32_t g_sample_index = 0;
-static uint32_t g_last_beat_ms = 0;
-static uint32_t g_last_ibi_ms = 0;
-static float g_last_bpm = 0.0f;
-static bool g_beat_state = false;
-static uint32_t g_next_sample_us = 0;
+unsigned long g_sample_index = 0;
+unsigned long g_last_beat_ms = 0;
+unsigned long g_last_ibi_ms = 0;
+float g_last_bpm = 0.0f;
+bool g_beat_state = false;
+unsigned long g_next_sample_us = 0;
 
-static inline float countsToVolts(uint32_t counts) {
+static float countsToVolts(unsigned int counts) {
   return (counts * ADC_REF_V) / (float)ADC_MAX_COUNTS;
 }
 
@@ -45,12 +46,12 @@ static void printHeader() {
   Serial.println(F("type,ms,sample,ppg_raw,beat_raw,ppg_v,beat_v"));
 }
 
-static void processOneSample(uint32_t now_us) {
-  const uint32_t now_ms = now_us / 1000UL;
-  const uint32_t ppg_raw = (uint32_t)analogRead(PIN_PPG);
-  const uint32_t beat_raw = (uint32_t)analogRead(PIN_BEAT);
-  const float ppg_v = countsToVolts(ppg_raw);
-  const float beat_v = countsToVolts(beat_raw);
+static void processOneSample(unsigned long now_us) {
+  unsigned long now_ms = now_us / 1000UL;
+  unsigned int ppg_raw = (unsigned int)analogRead(PIN_PPG);
+  unsigned int beat_raw = (unsigned int)analogRead(PIN_BEAT);
+  float ppg_v = countsToVolts(ppg_raw);
+  float beat_v = countsToVolts(beat_raw);
 
   bool new_beat = false;
   if (!g_beat_state && beat_raw >= BEAT_THRESHOLD_HIGH) {
@@ -103,21 +104,17 @@ void setup() {
   pinMode(PIN_HEART_LED, OUTPUT);
   digitalWrite(PIN_HEART_LED, LOW);
 
-  analogReadResolution(ADC_BITS);
-
   Serial.begin(SERIAL_BAUD);
   delay(300);
 
   printHeader();
-  Serial.println(F("INFO,UNO_R4,200Hz,ADC14bit"));
-
+  Serial.println(F("INFO,UNO,250Hz,ADC10bit"));
   g_next_sample_us = micros() + SAMPLE_PERIOD_US;
 }
 
 void loop() {
-  uint32_t now = micros();
-
-  while ((int32_t)(now - g_next_sample_us) >= 0) {
+  unsigned long now = micros();
+  while ((long)(now - g_next_sample_us) >= 0) {
     processOneSample(g_next_sample_us);
     g_next_sample_us += SAMPLE_PERIOD_US;
     now = micros();
