@@ -337,19 +337,20 @@ class FuturisticBackground(QWidget):
         painter.setRenderHint(QPainter.Antialiasing, True)
 
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor("#04121c"))
-        gradient.setColorAt(0.45, QColor("#0b2233"))
-        gradient.setColorAt(1.0, QColor("#12273d"))
+        gradient.setColorAt(0.0, QColor("#f6f1e8"))
+        gradient.setColorAt(0.46, QColor("#eef4f2"))
+        gradient.setColorAt(1.0, QColor("#eef1f8"))
         painter.fillRect(self.rect(), gradient)
 
         for center_x, center_y, radius, color_hex in (
-            (self.width() * 0.15, self.height() * 0.12, 260, "#18c3ff"),
-            (self.width() * 0.82, self.height() * 0.18, 210, "#f7a23b"),
-            (self.width() * 0.50, self.height() * 0.78, 320, "#49e1b6"),
+            (self.width() * 0.14, self.height() * 0.14, 300, "#fffdf7"),
+            (self.width() * 0.82, self.height() * 0.18, 260, "#d9efe9"),
+            (self.width() * 0.62, self.height() * 0.78, 340, "#eef0fb"),
+            (self.width() * 0.20, self.height() * 0.76, 220, "#fff5e8"),
         ):
             radial = QRadialGradient(center_x, center_y, radius)
             glow = QColor(color_hex)
-            glow.setAlpha(58)
+            glow.setAlpha(82)
             edge = QColor(color_hex)
             edge.setAlpha(0)
             radial.setColorAt(0.0, glow)
@@ -358,14 +359,14 @@ class FuturisticBackground(QWidget):
             painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
             painter.drawEllipse(QPoint(int(center_x), int(center_y)), int(radius), int(radius))
 
-        grid_pen = QPen(QColor(177, 232, 255, 18))
-        grid_pen.setWidth(1)
-        painter.setPen(grid_pen)
-        step = 42
-        for x in range(0, self.width(), step):
-            painter.drawLine(x, 0, x, self.height())
-        for y in range(0, self.height(), step):
-            painter.drawLine(0, y, self.width(), y)
+        painter.setPen(QPen(QColor(255, 255, 255, 145), 1))
+        painter.setBrush(Qt.NoBrush if hasattr(Qt, "NoBrush") else 0)
+        painter.drawRoundedRect(self.rect().adjusted(8, 8, -8, -8), 28, 28)
+
+        sweep_pen = QPen(QColor(15, 118, 110, 14), 2)
+        painter.setPen(sweep_pen)
+        painter.drawArc(-120, int(self.height() * 0.46), self.width() + 240, int(self.height() * 0.40), 0, 180 * 16)
+        painter.drawArc(-80, int(self.height() * 0.54), self.width() + 160, int(self.height() * 0.28), 0, 180 * 16)
 
         super().paintEvent(event)
 
@@ -483,6 +484,473 @@ class DashboardCard(QFrame):
         self.update_card("-", "측정 대기 중")
 
 
+class LandingShowcaseWidget(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setMinimumHeight(560)
+        self.setMaximumHeight(560)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.TextAntialiasing, True)
+
+        panel_x = 10
+        panel_y = 10
+        panel_w = max(240, self.width() - 20)
+        panel_h = max(240, self.height() - 20)
+
+        gradient = QLinearGradient(panel_x, panel_y, panel_x + panel_w, panel_y + panel_h)
+        gradient.setColorAt(0.0, QColor("#cec7ff"))
+        gradient.setColorAt(0.5, QColor("#d8d3ff"))
+        gradient.setColorAt(1.0, QColor("#b6acf7"))
+        painter.setPen(QPen(QColor(255, 255, 255, 90), 1))
+        painter.setBrush(gradient)
+        painter.drawRoundedRect(panel_x, panel_y, panel_w, panel_h, 28, 28)
+
+        for center_x, center_y, radius, color_hex in (
+            (panel_x + panel_w * 0.18, panel_y + panel_h * 0.55, 210, "#ffffff"),
+            (panel_x + panel_w * 0.56, panel_y + panel_h * 0.26, 180, "#f8f0ff"),
+            (panel_x + panel_w * 0.85, panel_y + panel_h * 0.72, 170, "#ddd3ff"),
+        ):
+            radial = QRadialGradient(center_x, center_y, radius)
+            glow = QColor(color_hex)
+            glow.setAlpha(80)
+            fade = QColor(color_hex)
+            fade.setAlpha(0)
+            radial.setColorAt(0.0, glow)
+            radial.setColorAt(1.0, fade)
+            painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+            painter.setBrush(radial)
+            painter.drawEllipse(QPoint(int(center_x), int(center_y)), int(radius), int(radius))
+
+        self._draw_search_chip(painter, panel_x + panel_w - 56, panel_y + 20, 38)
+
+        phone_w = panel_w * 0.17
+        phone_h = panel_h * 0.74
+        phone_y = panel_y + panel_h * 0.13
+        gap = panel_w * 0.08
+        left_x = panel_x + panel_w * 0.11
+        center_x = left_x + phone_w + gap
+        right_x = center_x + phone_w + gap
+
+        self._draw_phone_dashboard(painter, left_x, phone_y, phone_w, phone_h)
+        self._draw_phone_overview(painter, center_x, phone_y, phone_w, phone_h)
+        self._draw_phone_progress(painter, right_x, phone_y, phone_w, phone_h)
+
+        self._draw_float_metric_card(painter, left_x - 46, phone_y + 88, 54, 74, "Tasks", "12", "#5ec8ff")
+        self._draw_float_metric_card(painter, left_x + 24, phone_y + 82, 64, 80, "Score", "86", "#7b6bff")
+        self._draw_float_metric_card(painter, left_x + 100, phone_y + 90, 64, 76, "HRV", "34", "#8d82ff")
+        self._draw_float_metric_card(painter, left_x + 180, phone_y + 94, 52, 70, "Alerts", "7", "#ff6bd0")
+
+        self._draw_schedule_card(painter, right_x + phone_w - 4, phone_y + 18, 108, 114)
+        self._draw_radar_card(painter, right_x + phone_w - 18, phone_y + 136, 174, 112)
+        self._draw_analytics_card(painter, right_x - 14, phone_y + 286, 150, 102)
+        self._draw_calendar_card(painter, right_x + phone_w + 12, phone_y + 310, 126, 116)
+
+        super().paintEvent(event)
+
+    def _draw_search_chip(self, painter: QPainter, x: float, y: float, size: float) -> None:
+        painter.save()
+        painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+        painter.setBrush(QColor("#17141f"))
+        painter.drawRoundedRect(x, y, size, size, 10, 10)
+        pen = QPen(QColor("#f8f7ff"), 1.8)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush if hasattr(Qt, "NoBrush") else 0)
+        painter.drawEllipse(int(x + 11), int(y + 11), 11, 11)
+        painter.drawLine(int(x + 21), int(y + 21), int(x + 27), int(y + 27))
+        painter.drawLine(int(x + 16), int(y + 16), int(x + 19), int(y + 16))
+        painter.drawLine(int(x + 17.5), int(y + 14.5), int(x + 17.5), int(y + 17.5))
+        painter.restore()
+
+    def _draw_phone_shell(self, painter: QPainter, x: float, y: float, w: float, h: float) -> tuple[float, float, float, float]:
+        painter.save()
+        painter.setPen(QPen(QColor(37, 53, 99, 180), 1))
+        painter.setBrush(QColor("#0d1536"))
+        painter.drawRoundedRect(x, y, w, h, 26, 26)
+
+        screen_margin = w * 0.045
+        screen_x = x + screen_margin
+        screen_y = y + screen_margin
+        screen_w = w - screen_margin * 2
+        screen_h = h - screen_margin * 2
+
+        inner_grad = QLinearGradient(screen_x, screen_y, screen_x, screen_y + screen_h)
+        inner_grad.setColorAt(0.0, QColor("#0b1842"))
+        inner_grad.setColorAt(1.0, QColor("#06102d"))
+        painter.setPen(QPen(QColor(91, 117, 209, 90), 1))
+        painter.setBrush(inner_grad)
+        painter.drawRoundedRect(screen_x, screen_y, screen_w, screen_h, 22, 22)
+
+        notch_w = w * 0.26
+        notch_h = h * 0.035
+        notch_x = x + (w - notch_w) / 2
+        notch_y = y + h * 0.03
+        painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+        painter.setBrush(QColor("#0a1027"))
+        painter.drawRoundedRect(notch_x, notch_y, notch_w, notch_h, 8, 8)
+        painter.restore()
+        return screen_x, screen_y, screen_w, screen_h
+
+    def _draw_phone_header(
+        self,
+        painter: QPainter,
+        screen_x: float,
+        screen_y: float,
+        screen_w: float,
+        title: str,
+        subtitle: str,
+        *,
+        avatar: bool = False,
+    ) -> float:
+        painter.save()
+        if avatar:
+            painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+            painter.setBrush(QColor("#f4f8ff"))
+            painter.drawEllipse(int(screen_x + 12), int(screen_y + 14), 18, 18)
+            painter.setBrush(QColor("#102255"))
+            painter.drawEllipse(int(screen_x + 16), int(screen_y + 18), 10, 10)
+            painter.drawRoundedRect(screen_x + 17, screen_y + 28, 8, 4, 2, 2)
+            text_x = screen_x + 38
+        else:
+            text_x = screen_x + 14
+
+        painter.setPen(QColor("#f6f8ff"))
+        painter.setFont(QFont("Bahnschrift", 11, QFont.Weight.DemiBold))
+        painter.drawText(int(text_x), int(screen_y + 26), title)
+
+        painter.setPen(QColor("#8f9bc6"))
+        painter.setFont(QFont("Bahnschrift", 7))
+        painter.drawText(int(text_x), int(screen_y + 42), subtitle)
+
+        painter.setBrush(QColor("#16255c"))
+        painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+        painter.drawRoundedRect(screen_x + screen_w - 22, screen_y + 14, 10, 10, 3, 3)
+        painter.restore()
+        return screen_y + 54
+
+    def _draw_stat_box(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        title: str,
+        value: str,
+        accent: str,
+    ) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(accent), 1))
+        painter.setBrush(QColor("#0a1c4a"))
+        painter.drawRoundedRect(x, y, w, h, 12, 12)
+        painter.setPen(QColor("#8da4eb"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(x + 8), int(y + 14), title)
+        painter.setPen(QColor(accent))
+        painter.setFont(QFont("Bahnschrift", 13, QFont.Weight.DemiBold))
+        painter.drawText(int(x + 8), int(y + h - 12), value)
+        painter.restore()
+
+    def _draw_small_panel(self, painter: QPainter, x: float, y: float, w: float, h: float, title: str) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(84, 109, 201, 80), 1))
+        painter.setBrush(QColor("#09163d"))
+        painter.drawRoundedRect(x, y, w, h, 12, 12)
+        painter.setPen(QColor("#9aabdc"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(x + 8), int(y + 14), title)
+        painter.restore()
+
+    def _draw_line_graph(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        points: list[float],
+        accent: str,
+    ) -> None:
+        painter.save()
+        pen = QPen(QColor(accent), 2.0)
+        painter.setPen(pen)
+        if len(points) >= 2:
+            step_x = w / max(len(points) - 1, 1)
+            for index in range(len(points) - 1):
+                x1 = x + step_x * index
+                y1 = y + h * (1.0 - points[index])
+                x2 = x + step_x * (index + 1)
+                y2 = y + h * (1.0 - points[index + 1])
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+            painter.setBrush(QColor("#d8f8ff"))
+            painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+            focus_index = min(len(points) - 1, max(1, len(points) // 2))
+            fx = x + step_x * focus_index
+            fy = y + h * (1.0 - points[focus_index])
+            painter.drawEllipse(QPoint(int(fx), int(fy)), 4, 4)
+        painter.restore()
+
+    def _draw_bar_chart(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        values: list[float],
+        accent: str,
+    ) -> None:
+        painter.save()
+        painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+        bar_w = w / max(len(values) * 1.6, 1)
+        step = w / max(len(values), 1)
+        for index, value in enumerate(values):
+            bar_x = x + index * step + step * 0.15
+            bar_h = h * value
+            grad = QLinearGradient(bar_x, y + h - bar_h, bar_x, y + h)
+            grad.setColorAt(0.0, QColor(accent))
+            grad.setColorAt(1.0, QColor("#6c63ff"))
+            painter.setBrush(grad)
+            painter.drawRoundedRect(bar_x, y + h - bar_h, bar_w, bar_h, 4, 4)
+        painter.restore()
+
+    def _draw_bottom_nav(self, painter: QPainter, x: float, y: float, w: float) -> None:
+        painter.save()
+        icon_gap = w / 5
+        for index in range(4):
+            cx = x + icon_gap * (index + 0.6)
+            painter.setBrush(QColor("#20387f"))
+            painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+            painter.drawEllipse(QPoint(int(cx), int(y)), 4, 4)
+        painter.setBrush(QColor("#20d0ff"))
+        painter.drawEllipse(QPoint(int(x + icon_gap * 2.6), int(y)), 5, 5)
+        painter.restore()
+
+    def _draw_phone_dashboard(self, painter: QPainter, x: float, y: float, w: float, h: float) -> None:
+        screen_x, screen_y, screen_w, screen_h = self._draw_phone_shell(painter, x, y, w, h)
+        cursor_y = self._draw_phone_header(
+            painter,
+            screen_x,
+            screen_y,
+            screen_w,
+            "Welcome Back, Alex!",
+            "Dashboard",
+            avatar=True,
+        )
+        box_y = cursor_y + 8
+        box_w = (screen_w - 24) / 3
+        self._draw_stat_box(painter, screen_x + 10, box_y, box_w, 56, "Tasks", "12", "#4ab9ff")
+        self._draw_stat_box(painter, screen_x + 16 + box_w, box_y, box_w, 56, "Score", "86", "#7c6dff")
+        self._draw_stat_box(painter, screen_x + 22 + box_w * 2, box_y, box_w, 56, "Completed", "34", "#ff67cf")
+
+        chart_y = box_y + 70
+        self._draw_small_panel(painter, screen_x + 10, chart_y, screen_w - 20, 78, "Tasks by Status")
+        self._draw_line_graph(painter, screen_x + 18, chart_y + 28, screen_w - 36, 24, [0.20, 0.35, 0.18, 0.48, 0.32, 0.70], "#8b6fff")
+        painter.save()
+        painter.setPen(QColor("#35d2ff"))
+        painter.setFont(QFont("Bahnschrift", 14, QFont.Weight.DemiBold))
+        painter.drawText(int(screen_x + screen_w - 50), int(chart_y + 68), "73%")
+        painter.restore()
+
+        bottom_y = chart_y + 90
+        self._draw_small_panel(painter, screen_x + 10, bottom_y, screen_w * 0.44, 80, "Team Priority")
+        self._draw_small_panel(painter, screen_x + screen_w * 0.48, bottom_y, screen_w * 0.42, 80, "Ongoing Insights")
+        self._draw_line_graph(painter, screen_x + 18, bottom_y + 44, screen_w * 0.28, 18, [0.45, 0.62, 0.58, 0.72], "#4bd7ff")
+        self._draw_line_graph(painter, screen_x + screen_w * 0.52, bottom_y + 44, screen_w * 0.24, 18, [0.18, 0.50, 0.28, 0.62], "#8a6cff")
+        self._draw_bottom_nav(painter, screen_x + 8, screen_y + screen_h - 16, screen_w - 16)
+
+    def _draw_phone_overview(self, painter: QPainter, x: float, y: float, w: float, h: float) -> None:
+        screen_x, screen_y, screen_w, screen_h = self._draw_phone_shell(painter, x, y, w, h)
+        cursor_y = self._draw_phone_header(
+            painter,
+            screen_x,
+            screen_y,
+            screen_w,
+            "Projects Overview",
+            "Updated for this week",
+        )
+        chart_y = cursor_y + 10
+        self._draw_small_panel(painter, screen_x + 10, chart_y, screen_w - 20, 108, "Projects Created per Week")
+        self._draw_bar_chart(painter, screen_x + 18, chart_y + 30, screen_w - 36, 54, [0.28, 0.46, 0.64, 0.52, 0.44, 0.68, 0.80], "#5da9ff")
+
+        card_y = chart_y + 118
+        card_h = 54
+        labels = ("Website Revamp", "Marketing Dashboard", "Experience Redesign")
+        accents = ("#7c6dff", "#35d4ff", "#ff72d2")
+        for index, label in enumerate(labels):
+            self._draw_small_panel(painter, screen_x + 10, card_y + index * 62, screen_w - 20, card_h, label)
+            self._draw_line_graph(
+                painter,
+                screen_x + screen_w - 86,
+                card_y + index * 62 + 20,
+                56,
+                20,
+                [0.30, 0.36 + index * 0.05, 0.26, 0.54, 0.42],
+                accents[index],
+            )
+
+        focus_y = card_y + len(labels) * 62
+        self._draw_small_panel(painter, screen_x + 10, focus_y, screen_w - 20, 62, "Budget")
+        painter.save()
+        painter.setPen(QColor("#9ca9d7"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(screen_x + 18), int(focus_y + 36), "Ongoing campaigns")
+        painter.setPen(QColor("#7b71ff"))
+        painter.setFont(QFont("Bahnschrift", 12, QFont.Weight.DemiBold))
+        painter.drawText(int(screen_x + screen_w - 46), int(focus_y + 42), "62%")
+        painter.restore()
+        self._draw_bottom_nav(painter, screen_x + 8, screen_y + screen_h - 16, screen_w - 16)
+
+    def _draw_phone_progress(self, painter: QPainter, x: float, y: float, w: float, h: float) -> None:
+        screen_x, screen_y, screen_w, screen_h = self._draw_phone_shell(painter, x, y, w, h)
+        cursor_y = self._draw_phone_header(
+            painter,
+            screen_x,
+            screen_y,
+            screen_w,
+            "Task Progress",
+            "Tracking completion and time allocation",
+        )
+        chart_y = cursor_y + 10
+        self._draw_small_panel(painter, screen_x + 10, chart_y, screen_w - 20, 110, "Task completion rate")
+        self._draw_line_graph(
+            painter,
+            screen_x + 18,
+            chart_y + 30,
+            screen_w - 36,
+            36,
+            [0.58, 0.61, 0.39, 0.54, 0.57, 0.28, 0.52],
+            "#39d5ff",
+        )
+        painter.save()
+        painter.setPen(QColor("#b1bff0"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(screen_x + 18), int(chart_y + 94), "Active in Progress")
+        painter.drawText(int(screen_x + screen_w - 86), int(chart_y + 94), "Target KPI")
+        painter.restore()
+
+        mid_y = chart_y + 120
+        self._draw_small_panel(painter, screen_x + 10, mid_y, screen_w - 20, 76, "Activity feed")
+        painter.save()
+        painter.setPen(QColor("#8ea6dc"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        for index, line in enumerate(("Review health metrics", "Sync camera preview", "Export final report")):
+            painter.drawText(int(screen_x + 18), int(mid_y + 24 + index * 14), line)
+        painter.restore()
+
+        bottom_y = mid_y + 86
+        self._draw_small_panel(painter, screen_x + 10, bottom_y, screen_w - 20, 84, "Additional Analytics")
+        self._draw_bar_chart(painter, screen_x + 18, bottom_y + 28, 58, 34, [0.32, 0.54, 0.42, 0.72], "#45d4ff")
+        self._draw_line_graph(painter, screen_x + 88, bottom_y + 28, screen_w - 116, 28, [0.18, 0.24, 0.22, 0.30, 0.33], "#8c72ff")
+        self._draw_bottom_nav(painter, screen_x + 8, screen_y + screen_h - 16, screen_w - 16)
+
+    def _draw_float_metric_card(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        title: str,
+        value: str,
+        accent: str,
+    ) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(accent), 1))
+        painter.setBrush(QColor("#0b183f"))
+        painter.drawRoundedRect(x, y, w, h, 12, 12)
+        painter.setPen(QColor("#92a4dc"))
+        painter.setFont(QFont("Bahnschrift", 5))
+        painter.drawText(int(x + 8), int(y + 14), title)
+        painter.setPen(QColor(accent))
+        painter.setFont(QFont("Bahnschrift", 16, QFont.Weight.DemiBold))
+        painter.drawText(int(x + 8), int(y + h - 16), value)
+        painter.restore()
+
+    def _draw_schedule_card(self, painter: QPainter, x: float, y: float, w: float, h: float) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(107, 128, 231, 120), 1))
+        painter.setBrush(QColor("#12255a"))
+        painter.drawRoundedRect(x, y, w, h, 14, 14)
+        painter.setPen(QColor("#8beadb"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(x + 10), int(y + 16), "Today's Agenda")
+        painter.setPen(QColor("#dbe6ff"))
+        painter.setFont(QFont("Bahnschrift", 5))
+        items = ("08:00  Sync sensors", "11:00  Export session", "14:00  Review skin scores", "16:30  Final summary")
+        for index, item in enumerate(items):
+            painter.drawText(int(x + 10), int(y + 34 + index * 18), item)
+        painter.restore()
+
+    def _draw_radar_card(self, painter: QPainter, x: float, y: float, w: float, h: float) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(91, 114, 219, 120), 1))
+        painter.setBrush(QColor("#0f1d4f"))
+        painter.drawRoundedRect(x, y, w, h, 14, 14)
+        painter.setPen(QColor("#9ab1ef"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(x + 10), int(y + 16), "AI Healthcare overview")
+
+        cx = x + w * 0.45
+        cy = y + h * 0.58
+        radius = min(w, h) * 0.26
+        painter.setPen(QPen(QColor(83, 102, 189, 90), 1))
+        for scale in (1.0, 0.72, 0.44):
+            r = radius * scale
+            painter.drawLine(int(cx), int(cy - r), int(cx + r), int(cy))
+            painter.drawLine(int(cx + r), int(cy), int(cx), int(cy + r))
+            painter.drawLine(int(cx), int(cy + r), int(cx - r), int(cy))
+            painter.drawLine(int(cx - r), int(cy), int(cx), int(cy - r))
+        painter.setPen(QPen(QColor("#ff6cd0"), 1.2))
+        painter.setBrush(QColor(148, 106, 255, 70))
+        painter.drawLine(int(cx), int(cy - radius * 0.82), int(cx + radius * 0.76), int(cy))
+        painter.drawLine(int(cx + radius * 0.76), int(cy), int(cx), int(cy + radius * 0.52))
+        painter.drawLine(int(cx), int(cy + radius * 0.52), int(cx - radius * 0.58), int(cy))
+        painter.drawLine(int(cx - radius * 0.58), int(cy), int(cx), int(cy - radius * 0.82))
+        painter.restore()
+
+    def _draw_analytics_card(self, painter: QPainter, x: float, y: float, w: float, h: float) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(89, 119, 228, 120), 1))
+        painter.setBrush(QColor("#0f1d4c"))
+        painter.drawRoundedRect(x, y, w, h, 14, 14)
+        painter.setPen(QColor("#dce6ff"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(x + 10), int(y + 16), "Additional Analytics")
+        self._draw_bar_chart(painter, x + 12, y + 30, 38, 28, [0.30, 0.54, 0.40, 0.78], "#43d1ff")
+        self._draw_line_graph(painter, x + 58, y + 34, w - 70, 24, [0.20, 0.32, 0.28, 0.40, 0.52], "#8b6cff")
+        painter.restore()
+
+    def _draw_calendar_card(self, painter: QPainter, x: float, y: float, w: float, h: float) -> None:
+        painter.save()
+        painter.setPen(QPen(QColor(98, 120, 224, 120), 1))
+        painter.setBrush(QColor("#102154"))
+        painter.drawRoundedRect(x, y, w, h, 14, 14)
+        painter.setPen(QColor("#dce6ff"))
+        painter.setFont(QFont("Bahnschrift", 6))
+        painter.drawText(int(x + 10), int(y + 16), "Event Calendar")
+        start_x = x + 12
+        start_y = y + 28
+        cell = 13
+        for row in range(5):
+            for col in range(7):
+                cell_x = start_x + col * 15
+                cell_y = start_y + row * 15
+                painter.setPen(Qt.NoPen if hasattr(Qt, "NoPen") else 0)
+                painter.setBrush(QColor("#18316f"))
+                painter.drawRoundedRect(cell_x, cell_y, cell, cell, 3, 3)
+        for hx, hy in ((2, 1), (3, 1), (4, 1), (4, 3), (5, 3)):
+            cell_x = start_x + hx * 15
+            cell_y = start_y + hy * 15
+            painter.setBrush(QColor("#f05bd6"))
+            painter.drawRoundedRect(cell_x, cell_y, cell, cell, 3, 3)
+        painter.restore()
+
+
 class ReportTableWidget(QFrame):
     def __init__(self, accent: str = "#18c3ff") -> None:
         super().__init__()
@@ -532,24 +1000,24 @@ class ReportTableWidget(QFrame):
                 "padding: 12px 12px;"
                 "font-size: 12px;"
                 "font-weight: 700;"
-                "color: #f6fbff;"
-                "background: rgba(17, 57, 83, 0.96);"
-                "border: 1px solid rgba(143, 214, 243, 0.20);"
+                "color: #ffffff;"
+                f"background: {self.accent};"
+                "border: 1px solid rgba(255, 255, 255, 0.24);"
             )
             return label
 
-        base_bg = "rgba(9, 25, 39, 0.94)" if not alternate else "rgba(12, 31, 47, 0.96)"
-        border = "rgba(143, 214, 243, 0.14)"
+        base_bg = "rgba(252, 250, 245, 1)" if not alternate else "rgba(247, 248, 244, 1)"
+        border = "rgba(226, 230, 225, 1)"
         if emphasized:
-            base_bg = "rgba(24, 84, 73, 0.54)"
-            border = "rgba(132, 246, 203, 0.30)"
+            base_bg = "rgba(235, 245, 242, 1)"
+            border = "rgba(171, 207, 197, 1)"
 
         label.setObjectName("ReportBodyCell")
         label.setStyleSheet(
             "padding: 11px 12px;"
             "font-size: 12px;"
             "line-height: 1.45;"
-            f"color: {'#f8fdff' if emphasized else '#d9edf7'};"
+            f"color: {'#0f766e' if emphasized else '#334155'};"
             f"background: {base_bg};"
             f"border: 1px solid {border};"
         )
@@ -855,39 +1323,88 @@ class HealthRumWindow(QMainWindow):
     def build_ui(self) -> None:
         root = FuturisticBackground()
         root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(18, 18, 18, 18)
+        root_layout.setContentsMargins(22, 22, 22, 22)
         root_layout.setSpacing(14)
 
-        hero = QFrame()
-        hero.setObjectName("Hero")
-        hero_layout = QVBoxLayout(hero)
-        hero_layout.setContentsMargins(24, 22, 24, 22)
-        hero_layout.setSpacing(10)
+        shell = QFrame()
+        shell.setObjectName("AppShell")
+        shell_layout = QHBoxLayout(shell)
+        shell_layout.setContentsMargins(12, 12, 12, 12)
+        shell_layout.setSpacing(14)
 
-        title = QLabel("헬스럼")
-        title.setObjectName("HeroTitle")
+        rail = QFrame()
+        rail.setObjectName("NavRail")
+        rail.setFixedWidth(294)
+        rail_layout = QVBoxLayout(rail)
+        rail_layout.setContentsMargins(18, 18, 18, 18)
+        rail_layout.setSpacing(12)
+
+        identity = QFrame()
+        identity.setObjectName("RailBrand")
+        identity_layout = QVBoxLayout(identity)
+        identity_layout.setContentsMargins(18, 18, 18, 18)
+        identity_layout.setSpacing(6)
+
+        eyebrow = QLabel("PREMIUM HEALTHCARE SCREENING WORKSPACE")
+        eyebrow.setObjectName("ShellEyebrow")
+        title = QLabel("HEALTHRUM CARE STUDIO")
+        title.setObjectName("ShellTitle")
         subtitle = QLabel(
-            "바이오신호 측정, Face_AI 분석 확인, 최종 통합 리포트를 하나의 흐름으로 실행합니다. "
-            "현재 마법사는 6단계로 구성됩니다: 시작 -> 체질 설문 -> PSL_Test -> 얼굴 촬영 -> 얼굴 분석 확인 -> 최종 결과"
+            "설문, 바이오신호, 얼굴 분석, 최종 리포트를 하나의 정제된 흐름으로 연결하는 통합 헬스케어 워크스페이스"
         )
-        subtitle.setObjectName("HeroSubtitle")
+        subtitle.setObjectName("ShellSubtitle")
         subtitle.setWordWrap(True)
-        hero_layout.addWidget(title)
-        hero_layout.addWidget(subtitle)
+        identity_layout.addWidget(eyebrow)
+        identity_layout.addWidget(title)
+        identity_layout.addWidget(subtitle)
 
-        steps_row = QWidget()
-        steps_layout = QHBoxLayout(steps_row)
-        steps_layout.setContentsMargins(0, 6, 0, 0)
-        steps_layout.setSpacing(10)
+        self.shell_flow_card = self.build_shell_meta_card(
+            "Workflow",
+            "06 Steps",
+            "시작부터 최종 보고서까지 한 흐름으로 이어집니다.",
+        )
+        self.shell_module_card = self.build_shell_meta_card(
+            "Modules",
+            "Survey / PSL / Face",
+            "설문과 측정, 분석 결과가 하나의 세션에 누적됩니다.",
+        )
+        self.shell_session_card = self.build_shell_meta_card(
+            "Session",
+            "No Active Session",
+            "새 세션을 시작하면 저장과 추적이 활성화됩니다.",
+        )
+        self.shell_session_value = self.shell_session_card.findChild(QLabel, "ShellMetaValue")
+        self.shell_session_text = self.shell_session_card.findChild(QLabel, "ShellMetaText")
+
+        step_frame = QFrame()
+        step_frame.setObjectName("StepRail")
+        steps_layout = QVBoxLayout(step_frame)
+        steps_layout.setContentsMargins(10, 10, 10, 10)
+        steps_layout.setSpacing(8)
         for index, label in enumerate(STEP_LABELS, start=1):
             badge = StepBadge(index, label)
             self.step_badges.append(badge)
-            steps_layout.addWidget(badge, 1)
-        hero_layout.addWidget(steps_row)
-        root_layout.addWidget(hero)
+            steps_layout.addWidget(badge)
+        steps_layout.addStretch(1)
+
+        rail_layout.addWidget(identity)
+        rail_layout.addWidget(step_frame, 1)
+        rail_layout.addWidget(self.shell_flow_card)
+        rail_layout.addWidget(self.shell_module_card)
+        rail_layout.addWidget(self.shell_session_card)
+
+        content_shell = QFrame()
+        content_shell.setObjectName("WorkspaceShell")
+        content_layout = QVBoxLayout(content_shell)
+        content_layout.setContentsMargins(14, 14, 14, 14)
+        content_layout.setSpacing(0)
 
         self.stacked = AnimatedStackedWidget()
-        root_layout.addWidget(self.stacked, 1)
+        content_layout.addWidget(self.stacked)
+
+        shell_layout.addWidget(rail)
+        shell_layout.addWidget(content_shell, 1)
+        root_layout.addWidget(shell, 1)
 
         self.page_main = self.wrap_page(self.build_main_page())
         self.page_survey = self.wrap_page(self.build_survey_page())
@@ -916,116 +1433,407 @@ class HealthRumWindow(QMainWindow):
         scroll.setWidget(content)
         return scroll
 
+    def build_shell_meta_card(self, title: str, value: str, detail: str) -> QFrame:
+        card = QFrame()
+        card.setObjectName("ShellMetaCard")
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(4)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("ShellMetaTitle")
+        value_label = QLabel(value)
+        value_label.setObjectName("ShellMetaValue")
+        detail_label = QLabel(detail)
+        detail_label.setObjectName("ShellMetaText")
+        detail_label.setWordWrap(True)
+
+        layout.addWidget(title_label)
+        layout.addWidget(value_label)
+        layout.addWidget(detail_label)
+        return card
+
+    def build_product_badge(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("ProductBadge")
+        label.setAlignment(ALIGN_CENTER)
+        return label
+
+    def build_product_banner(
+        self,
+        eyebrow: str,
+        title: str,
+        description: str,
+        badges: list[str],
+        aside_title: str,
+        aside_value: str,
+        aside_lines: list[str],
+        accent: str,
+    ) -> QFrame:
+        banner = QFrame()
+        banner.setObjectName("ProductBanner")
+
+        layout = QVBoxLayout(banner)
+        layout.setContentsMargins(26, 22, 26, 22)
+        layout.setSpacing(14)
+
+        accent_strip = QFrame()
+        accent_strip.setFixedHeight(4)
+        accent_strip.setFixedWidth(84)
+        accent_strip.setStyleSheet(f"background:{accent}; border-radius: 2px;")
+
+        content_grid = QGridLayout()
+        content_grid.setContentsMargins(0, 0, 0, 0)
+        content_grid.setHorizontalSpacing(18)
+        content_grid.setVerticalSpacing(10)
+        content_grid.setColumnStretch(0, 7)
+        content_grid.setColumnStretch(1, 4)
+
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
+
+        eyebrow_label = QLabel(eyebrow)
+        eyebrow_label.setObjectName("ProductBannerEyebrow")
+        title_label = QLabel(title)
+        title_label.setObjectName("ProductBannerTitle")
+        title_label.setWordWrap(True)
+        desc_label = QLabel(description)
+        desc_label.setObjectName("ProductBannerText")
+        desc_label.setWordWrap(True)
+
+        left_layout.addWidget(eyebrow_label)
+        left_layout.addWidget(title_label)
+        left_layout.addWidget(desc_label)
+
+        aside = QFrame()
+        aside.setObjectName("ProductBannerAside")
+        aside_layout = QVBoxLayout(aside)
+        aside_layout.setContentsMargins(18, 18, 18, 18)
+        aside_layout.setSpacing(8)
+
+        accent_bar = QFrame()
+        accent_bar.setFixedHeight(4)
+        accent_bar.setStyleSheet(f"background:{accent}; border-radius: 2px;")
+
+        aside_title_label = QLabel(aside_title)
+        aside_title_label.setObjectName("ProductBannerAsideTitle")
+        aside_value_label = QLabel(aside_value)
+        aside_value_label.setObjectName("ProductBannerAsideValue")
+        aside_value_label.setWordWrap(True)
+
+        aside_layout.addWidget(accent_bar)
+        aside_layout.addWidget(aside_title_label)
+        aside_layout.addWidget(aside_value_label)
+        for line in aside_lines:
+            detail = QLabel(f"• {line}")
+            detail.setObjectName("ProductBannerAsideText")
+            detail.setWordWrap(True)
+            aside_layout.addWidget(detail)
+        aside_layout.addStretch(1)
+
+        divider = QFrame()
+        divider.setFixedHeight(1)
+        divider.setObjectName("BannerDivider")
+
+        badge_row = QWidget()
+        badge_layout = QHBoxLayout(badge_row)
+        badge_layout.setContentsMargins(0, 0, 0, 0)
+        badge_layout.setSpacing(8)
+        for badge in badges:
+            badge_layout.addWidget(self.build_product_badge(badge))
+        badge_layout.addStretch(1)
+
+        content_grid.addWidget(left_panel, 0, 0)
+        content_grid.addWidget(aside, 0, 1)
+        layout.addWidget(accent_strip, 0, ALIGN_LEFT)
+        layout.addLayout(content_grid)
+        layout.addWidget(divider)
+        layout.addWidget(badge_row)
+        return banner
+
+    def build_metric_tile(self, value: str, title: str, detail: str, accent: str) -> QFrame:
+        card = QFrame()
+        card.setObjectName("MetricTile")
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(8)
+
+        accent_bar = QFrame()
+        accent_bar.setFixedHeight(4)
+        accent_bar.setStyleSheet(f"background:{accent}; border-radius: 2px;")
+
+        value_label = QLabel(value)
+        value_label.setObjectName("MetricTileValue")
+        value_label.setStyleSheet(f"color: {accent};")
+
+        title_label = QLabel(title)
+        title_label.setObjectName("MetricTileTitle")
+        title_label.setWordWrap(True)
+
+        detail_label = QLabel(detail)
+        detail_label.setObjectName("MetricTileText")
+        detail_label.setWordWrap(True)
+
+        layout.addWidget(accent_bar)
+        layout.addWidget(value_label)
+        layout.addWidget(title_label)
+        layout.addWidget(detail_label)
+        layout.addStretch(1)
+        return card
+
+    def build_utility_card(self, title: str, items: list[str], accent: str, subtitle: str | None = None) -> QFrame:
+        card = QFrame()
+        card.setObjectName("UtilityCard")
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(8)
+
+        accent_bar = QFrame()
+        accent_bar.setFixedHeight(4)
+        accent_bar.setStyleSheet(f"background:{accent}; border-radius: 2px;")
+
+        title_label = QLabel(title)
+        title_label.setObjectName("UtilityCardTitle")
+        title_label.setStyleSheet(f"color: {accent};")
+        layout.addWidget(accent_bar)
+        layout.addWidget(title_label)
+
+        if subtitle:
+            subtitle_label = QLabel(subtitle)
+            subtitle_label.setObjectName("UtilityCardText")
+            subtitle_label.setWordWrap(True)
+            layout.addWidget(subtitle_label)
+
+        for item in items:
+            text_label = QLabel(f"• {item}")
+            text_label.setObjectName("UtilityCardText")
+            text_label.setWordWrap(True)
+            layout.addWidget(text_label)
+
+        layout.addStretch(1)
+        return card
+
     def build_main_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(14)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(18)
 
-        intro_panel = QFrame()
-        intro_panel.setObjectName("Panel")
-        intro_layout = QVBoxLayout(intro_panel)
-        intro_layout.setContentsMargins(22, 22, 22, 22)
-        intro_layout.setSpacing(14)
+        top_grid = QGridLayout()
+        top_grid.setContentsMargins(0, 0, 0, 0)
+        top_grid.setHorizontalSpacing(14)
+        top_grid.setVerticalSpacing(14)
+        top_grid.setColumnStretch(0, 7)
+        top_grid.setColumnStretch(1, 4)
 
-        heading = QLabel("1. 세션 시작")
-        heading.setObjectName("SectionTitle")
-        body = QLabel(
-            "새 세션을 만들고 바로 PSL_Test 측정으로 이동합니다. "
-            "최종 결과 페이지에서는 PSL 바이오신호 결과와 Face_AI 결과가 한 화면에 통합되어 표시됩니다."
+        story_card = QFrame()
+        story_card.setObjectName("EditorialHero")
+        story_layout = QVBoxLayout(story_card)
+        story_layout.setContentsMargins(28, 26, 28, 26)
+        story_layout.setSpacing(12)
+
+        story_kicker = QLabel("Healthrum Product Experience")
+        story_kicker.setObjectName("ProductBannerEyebrow")
+        story_title = QLabel("검사 흐름을\n하나의 완성된 제품처럼 시작합니다")
+        story_title.setObjectName("ProductBannerTitle")
+        story_title.setWordWrap(True)
+        story_desc = QLabel(
+            "설문, 센서 측정, 얼굴 분석, 리포트 출력까지 따로 노는 도구처럼 보이지 않도록 "
+            "정보 흐름과 작업 동선을 다시 구성했습니다."
         )
-        body.setObjectName("BodyText")
-        body.setWordWrap(True)
+        story_desc.setObjectName("ProductBannerText")
+        story_desc.setWordWrap(True)
 
-        guide = QLabel(
-            "권장 순서\n"
-            "1. Arduino UNO와 PSL_iPPG2C를 연결합니다\n"
-            "2. PSL_Test와 Face_AI에 사용할 카메라를 연결합니다\n"
-            "3. 세션을 시작하고 6단계 흐름대로 진행합니다"
+        badge_row = QWidget()
+        badge_layout = QHBoxLayout(badge_row)
+        badge_layout.setContentsMargins(0, 4, 0, 0)
+        badge_layout.setSpacing(8)
+        for text in ("Single Session", "Signal + Face", "Report Ready"):
+            badge_layout.addWidget(self.build_product_badge(text))
+        badge_layout.addStretch(1)
+
+        story_layout.addWidget(story_kicker)
+        story_layout.addWidget(story_title)
+        story_layout.addWidget(story_desc)
+        story_layout.addWidget(badge_row)
+        story_layout.addStretch(1)
+
+        session_card = QFrame()
+        session_card.setObjectName("MainControlCard")
+        session_layout = QVBoxLayout(session_card)
+        session_layout.setContentsMargins(22, 22, 22, 22)
+        session_layout.setSpacing(12)
+
+        session_caption = QLabel("Session Center")
+        session_caption.setObjectName("PanelTitle")
+        self.main_session_label = QLabel("세션 준비 전\n아직 생성된 세션이 없습니다.")
+        self.main_session_label.setObjectName("ProductBannerAsideValue")
+        self.main_session_label.setWordWrap(True)
+        self.main_session_hint_label = QLabel(
+            "새 세션을 생성하면 바로 체질 설문으로 이동하고, 이후 결과가 같은 세션 폴더에 누적됩니다."
         )
-        guide.setObjectName("InfoBlock")
-        guide.setWordWrap(True)
+        self.main_session_hint_label.setObjectName("PanelText")
+        self.main_session_hint_label.setWordWrap(True)
 
-        self.main_session_label = QLabel("아직 생성된 세션이 없습니다.")
-        self.main_session_label.setObjectName("InfoText")
-
-        self.main_start_button = QPushButton("세션 시작\n체질 설문으로 이동")
+        self.main_start_button = QPushButton("새 세션 시작")
+        self.main_start_button.setObjectName("PrimaryButton")
         self.main_start_button.clicked.connect(self.start_new_session)
 
-        intro_layout.addWidget(heading)
-        intro_layout.addWidget(body)
-        intro_layout.addWidget(guide)
-        intro_layout.addWidget(self.main_session_label)
-        intro_layout.addWidget(self.main_start_button)
-        layout.addWidget(intro_panel)
+        session_layout.addWidget(session_caption)
+        session_layout.addWidget(self.main_session_label)
+        session_layout.addWidget(self.main_session_hint_label)
+        session_layout.addWidget(self.main_start_button)
+        session_layout.addStretch(1)
 
-        feature_grid = QGridLayout()
-        feature_grid.setSpacing(12)
-        for idx, meta in enumerate(
-            (
-                ("고정 시리얼 경로", "PSL_Test용 Arduino COM 포트와 1000000 baud를 고정 사용합니다", "#18c3ff"),
-                ("Face_AI 확인 단계", "최종 결과 전에 Face_AI 전용 확인 페이지가 추가되었습니다", "#49e1b6"),
-                ("통합 저장", "모든 결과가 하나의 세션 요약으로 다시 저장됩니다", "#f7a23b"),
-            )
+        top_grid.addWidget(story_card, 0, 0)
+        top_grid.addWidget(session_card, 0, 1)
+        layout.addLayout(top_grid)
+
+        module_grid = QGridLayout()
+        module_grid.setContentsMargins(0, 0, 0, 0)
+        module_grid.setSpacing(12)
+        module_grid.addWidget(
+            self.build_metric_tile("01", "체질 설문", "사용자 성향과 초기 체질 후보를 빠르게 정리합니다.", "#1d4ed8"),
+            0,
+            0,
+        )
+        module_grid.addWidget(
+            self.build_metric_tile("02", "PSL 측정", "심박수, HRV, 스트레스, 혈압 추정 지표를 수집합니다.", "#0f766e"),
+            0,
+            1,
+        )
+        module_grid.addWidget(
+            self.build_metric_tile("03", "Face_AI", "얼굴 촬영과 피부 분석 결과를 한 세션에 연결합니다.", "#9a6b2f"),
+            0,
+            2,
+        )
+        layout.addLayout(module_grid)
+
+        bottom_grid = QGridLayout()
+        bottom_grid.setContentsMargins(0, 0, 0, 0)
+        bottom_grid.setHorizontalSpacing(12)
+        bottom_grid.setVerticalSpacing(12)
+        bottom_grid.setColumnStretch(0, 5)
+        bottom_grid.setColumnStretch(1, 5)
+
+        workflow_card = QFrame()
+        workflow_card.setObjectName("Panel")
+        workflow_layout = QVBoxLayout(workflow_card)
+        workflow_layout.setContentsMargins(22, 22, 22, 22)
+        workflow_layout.setSpacing(12)
+        workflow_title = QLabel("검사 플로우")
+        workflow_title.setObjectName("PanelTitle")
+        workflow_layout.addWidget(workflow_title)
+        for heading, detail in (
+            ("1. Session", "새 세션 생성 후 체질 설문부터 시작합니다."),
+            ("2. PSL", "바이오신호 측정으로 심혈관 지표를 확보합니다."),
+            ("3. Face", "얼굴 촬영과 피부 분석을 진행합니다."),
+            ("4. Report", "모든 결과를 통합 보고서로 정리합니다."),
         ):
-            card = DashboardCard(meta[0], meta[2])
-            card.update_card("준비됨", meta[1])
-            feature_grid.addWidget(card, idx // 2, idx % 2)
-        feature_group = QFrame()
-        feature_group.setObjectName("Panel")
-        fg_layout = QVBoxLayout(feature_group)
-        fg_layout.setContentsMargins(16, 16, 16, 16)
-        fg_layout.addLayout(feature_grid)
-        layout.addWidget(feature_group)
+            row = QFrame()
+            row.setObjectName("TimelineRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(12)
+            dot = QLabel("●")
+            dot.setObjectName("TimelineDot")
+            title_box = QVBoxLayout()
+            title_box.setContentsMargins(0, 0, 0, 0)
+            title_box.setSpacing(2)
+            heading_label = QLabel(heading)
+            heading_label.setObjectName("UtilityCardTitle")
+            detail_label = QLabel(detail)
+            detail_label.setObjectName("UtilityCardText")
+            detail_label.setWordWrap(True)
+            title_box.addWidget(heading_label)
+            title_box.addWidget(detail_label)
+            row_layout.addWidget(dot, 0, ALIGN_TOP)
+            row_layout.addLayout(title_box, 1)
+            workflow_layout.addWidget(row)
+
+        readiness_card = QFrame()
+        readiness_card.setObjectName("Panel")
+        readiness_layout = QVBoxLayout(readiness_card)
+        readiness_layout.setContentsMargins(22, 22, 22, 22)
+        readiness_layout.setSpacing(12)
+        readiness_title = QLabel("현장 준비와 저장")
+        readiness_title.setObjectName("PanelTitle")
+        readiness_text = QLabel("센서 연결, 카메라 점검, 조명 확보, 결과 저장 위치를 한 번에 확인할 수 있도록 묶었습니다.")
+        readiness_text.setObjectName("PanelText")
+        readiness_text.setWordWrap(True)
+        readiness_layout.addWidget(readiness_title)
+        readiness_layout.addWidget(readiness_text)
+        readiness_layout.addWidget(
+            self.build_utility_card(
+                "준비 체크",
+                [
+                    "Arduino UNO와 PSL_iPPG2C 센서 연결",
+                    "PSL_Test / Face_AI용 카메라 인덱스 확인",
+                    "얼굴 정면 조명과 안정된 자세 확보",
+                ],
+                "#0f766e",
+            )
+        )
+        readiness_layout.addWidget(
+            self.build_utility_card(
+                "저장 산출물",
+                [
+                    "`Health_rum_outputs/session_*` 폴더에 자동 저장",
+                    "설문 요약, PSL 결과, Face_AI 결과, 최종 리포트 누적",
+                ],
+                "#9a6b2f",
+            )
+        )
+
+        bottom_grid.addWidget(workflow_card, 0, 0)
+        bottom_grid.addWidget(readiness_card, 0, 1)
+        layout.addLayout(bottom_grid)
         layout.addStretch(1)
         return page
 
     def build_survey_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(18)
 
-        survey_panel = QFrame()
-        survey_panel.setObjectName("Panel")
-        survey_layout = QVBoxLayout(survey_panel)
-        survey_layout.setContentsMargins(18, 18, 18, 18)
-        survey_layout.setSpacing(12)
-
-        title = QLabel("2. 4성 체질 설문")
-        title.setObjectName("SectionTitle")
-        desc = QLabel(
-            "각 체질 카드 안의 문항을 직접 체크하세요. 여러 문항을 동시에 선택할 수 있으며, "
-            "가장 많이 체크된 체질을 기본 체질 후보로 사용한 뒤 PSL_Test와 Face_AI 결과를 함께 반영해 최종 타입을 판단합니다."
-        )
-        desc.setObjectName("BodyText")
-        desc.setWordWrap(True)
-        survey_layout.addWidget(title)
-        survey_layout.addWidget(desc)
-
-        guide = QLabel(
-            "설문 방식 안내\n"
-            "• 체질별 4개 문항을 각각 개별 선택합니다.\n"
-            "• 하나의 체질 안에서 여러 문항을 동시에 선택할 수 있습니다.\n"
-            "• 선택 수가 많을수록 해당 체질 경향이 강한 것으로 반영됩니다."
-        )
-        guide.setObjectName("InfoBlock")
-        guide.setWordWrap(True)
-        survey_layout.addWidget(guide)
+        intro = QFrame()
+        intro.setObjectName("ProductBanner")
+        intro_layout = QVBoxLayout(intro)
+        intro_layout.setContentsMargins(24, 22, 24, 22)
+        intro_layout.setSpacing(10)
+        intro_kicker = QLabel("STEP 2  CONSTITUTION SURVEY")
+        intro_kicker.setObjectName("ProductBannerEyebrow")
+        intro_title = QLabel("설문 보드는 넓게,\n판단과 이동은 아래로 분리했습니다")
+        intro_title.setObjectName("ProductBannerTitle")
+        intro_title.setWordWrap(True)
+        intro_desc = QLabel("질문 선택 영역을 먼저 크게 확보하고, 결과 해석과 다음 단계 이동은 하단에서 정리하도록 배치를 바꿨습니다.")
+        intro_desc.setObjectName("ProductBannerText")
+        intro_desc.setWordWrap(True)
+        intro_layout.addWidget(intro_kicker)
+        intro_layout.addWidget(intro_title)
+        intro_layout.addWidget(intro_desc)
+        layout.addWidget(intro)
 
         survey_grid = QGridLayout()
+        survey_grid.setContentsMargins(0, 0, 0, 0)
         survey_grid.setSpacing(12)
         for idx, group in enumerate(SURVEY_GROUPS):
             card = QFrame()
-            card.setObjectName("Panel")
+            card.setObjectName("QuestionCard")
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(18, 18, 18, 18)
             card_layout.setSpacing(10)
 
             heading = QLabel(group["label"])
-            heading.setObjectName("SectionTitle")
+            heading.setObjectName("PanelTitle")
             sub = QLabel(group["subtitle"])
-            sub.setObjectName("BodyText")
+            sub.setObjectName("PanelText")
             sub.setWordWrap(True)
 
             item_count = QLabel(f"선택 항목: 0 / {len(group['items'])}")
@@ -1051,49 +1859,129 @@ class HealthRumWindow(QMainWindow):
             card_layout.addWidget(item_count)
             card_layout.addWidget(checkbox_column)
             survey_grid.addWidget(card, idx // 2, idx % 2)
-        survey_layout.addLayout(survey_grid)
+        layout.addLayout(survey_grid)
+
+        insight_grid = QGridLayout()
+        insight_grid.setContentsMargins(0, 0, 0, 0)
+        insight_grid.setHorizontalSpacing(12)
+        insight_grid.setVerticalSpacing(12)
+        insight_grid.setColumnStretch(0, 6)
+        insight_grid.setColumnStretch(1, 4)
+
+        summary_panel = QFrame()
+        summary_panel.setObjectName("Panel")
+        summary_layout = QVBoxLayout(summary_panel)
+        summary_layout.setContentsMargins(20, 20, 20, 20)
+        summary_layout.setSpacing(12)
+
+        summary_title = QLabel("라이브 해석")
+        summary_title.setObjectName("PanelTitle")
+        summary_layout.addWidget(summary_title)
 
         self.survey_result_label = QLabel("기본 체질 미리보기: 계산 중")
         self.survey_result_label.setObjectName("StatusText")
         self.survey_result_label.setWordWrap(True)
-        survey_layout.addWidget(self.survey_result_label)
+        summary_layout.addWidget(self.survey_result_label)
 
         self.survey_summary_text = QPlainTextEdit()
         self.survey_summary_text.setReadOnly(True)
-        self.survey_summary_text.setMinimumHeight(180)
-        survey_layout.addWidget(self.wrap_group("설문 요약", self.survey_summary_text))
-        layout.addWidget(survey_panel)
+        self.survey_summary_text.setMinimumHeight(240)
+        summary_layout.addWidget(self.survey_summary_text, 1)
+        insight_grid.addWidget(summary_panel, 0, 0)
+
+        action_panel = QFrame()
+        action_panel.setObjectName("Panel")
+        action_layout = QVBoxLayout(action_panel)
+        action_layout.setContentsMargins(20, 20, 20, 20)
+        action_layout.setSpacing(12)
+        action_title = QLabel("판단과 이동")
+        action_title.setObjectName("PanelTitle")
+        action_layout.addWidget(action_title)
+        action_layout.addWidget(
+            self.build_utility_card(
+                "설문 규칙",
+                [
+                    "체질별 4개 문항을 독립적으로 선택합니다.",
+                    "선택 수가 많을수록 해당 체질 경향이 강하게 반영됩니다.",
+                    "설문 결과는 최종 결과 페이지에서 PSL와 Face_AI와 함께 결합됩니다.",
+                ],
+                "#1d4ed8",
+            )
+        )
 
         action_grid = QGridLayout()
+        action_grid.setContentsMargins(0, 4, 0, 0)
         action_grid.setSpacing(10)
         self.survey_back_button = QPushButton("시작 페이지로 돌아가기")
+        self.survey_back_button.setObjectName("GhostButton")
         self.survey_back_button.clicked.connect(lambda: self.go_to_step(0))
         self.survey_next_button = QPushButton("설문 완료 후 PSL_Test로 이동")
+        self.survey_next_button.setObjectName("PrimaryButton")
         self.survey_next_button.clicked.connect(self.complete_survey_and_continue)
         action_grid.addWidget(self.survey_back_button, 0, 0)
-        action_grid.addWidget(self.survey_next_button, 0, 1)
-        layout.addLayout(action_grid)
+        action_grid.addWidget(self.survey_next_button, 1, 0)
+        action_layout.addLayout(action_grid)
+        action_layout.addStretch(1)
+        insight_grid.addWidget(action_panel, 0, 1)
+
+        layout.addLayout(insight_grid)
         layout.addStretch(1)
         return page
 
     def build_psl_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(18)
+
+        metric_strip = QFrame()
+        metric_strip.setObjectName("Panel")
+        metric_strip_layout = QVBoxLayout(metric_strip)
+        metric_strip_layout.setContentsMargins(22, 20, 22, 20)
+        metric_strip_layout.setSpacing(12)
+        strip_title = QLabel("STEP 3  PSL TEST")
+        strip_title.setObjectName("ProductBannerEyebrow")
+        strip_desc = QLabel("측정은 위에서 요약하고, 설정과 로그는 아래 작업 구역으로 분리했습니다.")
+        strip_desc.setObjectName("PanelText")
+        strip_desc.setWordWrap(True)
+        metric_strip_layout.addWidget(strip_title)
+        metric_strip_layout.addWidget(strip_desc)
+
+        psl_cards_panel = QFrame()
+        psl_cards_panel.setObjectName("PanelInner")
+        psl_card_layout = QGridLayout(psl_cards_panel)
+        psl_card_layout.setContentsMargins(0, 0, 0, 0)
+        psl_card_layout.setSpacing(10)
+        psl_card_meta = {
+            "heart_rate": ("심박수", "#0f766e"),
+            "hrv": ("HRV", "#1d4ed8"),
+            "stress": ("스트레스", "#9a6b2f"),
+            "blood_pressure": ("혈압 추정", "#2f7f73"),
+        }
+        for idx, (key, meta) in enumerate(psl_card_meta.items()):
+            card = DashboardCard(meta[0], meta[1])
+            self.psl_cards[key] = card
+            psl_card_layout.addWidget(card, 0, idx)
+        metric_strip_layout.addWidget(psl_cards_panel)
+        layout.addWidget(metric_strip)
+
+        content_grid = QGridLayout()
+        content_grid.setContentsMargins(0, 0, 0, 0)
+        content_grid.setHorizontalSpacing(12)
+        content_grid.setVerticalSpacing(12)
+        content_grid.setColumnStretch(0, 6)
+        content_grid.setColumnStretch(1, 4)
 
         config_panel = QFrame()
         config_panel.setObjectName("Panel")
         config_layout = QVBoxLayout(config_panel)
-        config_layout.setContentsMargins(18, 18, 18, 18)
-        config_layout.setSpacing(12)
+        config_layout.setContentsMargins(20, 20, 20, 20)
+        config_layout.setSpacing(14)
 
-        title = QLabel("3. PSL_Test 측정")
-        title.setObjectName("SectionTitle")
-        desc = QLabel(
-            "고정 Arduino baud rate와 고정 샘플레이트 기준으로 iPPG 단독 또는 카메라 + PPG 측정을 수행합니다."
-        )
-        desc.setObjectName("BodyText")
+        title = QLabel("측정 콘솔")
+        title.setObjectName("PanelTitle")
+        desc = QLabel("시리얼 포트, 카메라, 측정 시간, 보정 정보를 입력한 뒤 실행합니다.")
+        desc.setObjectName("PanelText")
         desc.setWordWrap(True)
         config_layout.addWidget(title)
         config_layout.addWidget(desc)
@@ -1108,6 +1996,7 @@ class HealthRumWindow(QMainWindow):
 
         self.psl_port_combo = QComboBox()
         self.psl_port_refresh = QPushButton("포트 새로고침")
+        self.psl_port_refresh.setObjectName("GhostButton")
         self.psl_port_refresh.clicked.connect(self.refresh_ports)
         port_row = QWidget()
         port_layout = QHBoxLayout(port_row)
@@ -1118,6 +2007,7 @@ class HealthRumWindow(QMainWindow):
 
         self.psl_camera_combo = QComboBox()
         self.psl_camera_refresh = QPushButton("카메라 새로고침")
+        self.psl_camera_refresh.setObjectName("GhostButton")
         self.psl_camera_refresh.clicked.connect(self.refresh_psl_cameras)
         psl_cam_row = QWidget()
         psl_cam_layout = QHBoxLayout(psl_cam_row)
@@ -1160,65 +2050,128 @@ class HealthRumWindow(QMainWindow):
         button_grid = QGridLayout()
         button_grid.setSpacing(10)
         self.psl_start_button = QPushButton("PSL_Test 실행")
+        self.psl_start_button.setObjectName("PrimaryButton")
         self.psl_start_button.clicked.connect(self.start_psl_measurement)
         self.psl_to_face_button = QPushButton("얼굴 촬영으로 이동")
+        self.psl_to_face_button.setObjectName("GhostButton")
         self.psl_to_face_button.setEnabled(False)
         self.psl_to_face_button.clicked.connect(lambda: self.go_to_step(3))
         button_grid.addWidget(self.psl_start_button, 0, 0)
         button_grid.addWidget(self.psl_to_face_button, 0, 1)
         config_layout.addLayout(button_grid)
+        content_grid.addWidget(config_panel, 0, 0)
 
+        status_panel = QFrame()
+        status_panel.setObjectName("Panel")
+        status_layout = QVBoxLayout(status_panel)
+        status_layout.setContentsMargins(20, 20, 20, 20)
+        status_layout.setSpacing(12)
+
+        live_title = QLabel("상태와 가이드")
+        live_title.setObjectName("PanelTitle")
+        live_desc = QLabel("실행 상태, 측정 팁, 다음 단계 준비를 이 영역에 모았습니다.")
+        live_desc.setObjectName("PanelText")
+        live_desc.setWordWrap(True)
         self.psl_status_label = QLabel("PSL_Test 측정을 기다리는 중입니다.")
         self.psl_status_label.setObjectName("StatusText")
         self.psl_status_label.setWordWrap(True)
-        config_layout.addWidget(self.psl_status_label)
-        layout.addWidget(config_panel)
 
-        psl_card_group = QGroupBox("PSL 실시간 요약")
-        psl_card_layout = QGridLayout(psl_card_group)
-        psl_card_meta = {
-            "heart_rate": ("심박수", "#18c3ff"),
-            "hrv": ("HRV", "#ff6b6b"),
-            "stress": ("스트레스", "#f7a23b"),
-            "blood_pressure": ("혈압 추정", "#88f1ff"),
-        }
-        for idx, (key, meta) in enumerate(psl_card_meta.items()):
-            card = DashboardCard(meta[0], meta[1])
-            self.psl_cards[key] = card
-            psl_card_layout.addWidget(card, idx // 2, idx % 2)
-        layout.addWidget(psl_card_group)
+        status_layout.addWidget(live_title)
+        status_layout.addWidget(live_desc)
+        status_layout.addWidget(self.psl_status_label)
+        status_layout.addWidget(
+            self.build_utility_card(
+                "측정 팁",
+                [
+                    "센서 접촉을 일정하게 유지하고 손 움직임을 최소화하세요.",
+                    "카메라 + PPG 모드에서는 조명 변화와 얼굴 움직임을 줄이면 품질이 좋아집니다.",
+                    "보정 SBP, DBP를 입력하면 혈압 추정 해석에 도움이 됩니다.",
+                ],
+                "#0f766e",
+            )
+        )
+        status_layout.addWidget(
+            self.build_utility_card(
+                "다음 단계",
+                [
+                    "측정이 끝나면 얼굴 촬영 단계로 바로 이어집니다.",
+                    "요약과 로그는 아래 영역에서 확인할 수 있습니다.",
+                ],
+                "#1d4ed8",
+            )
+        )
+        status_layout.addStretch(1)
+        content_grid.addWidget(status_panel, 0, 1)
+        layout.addLayout(content_grid)
 
         self.psl_summary = QPlainTextEdit()
         self.psl_summary.setReadOnly(True)
-        self.psl_summary.setMinimumHeight(220)
+        self.psl_summary.setMinimumHeight(240)
         self.psl_log = QPlainTextEdit()
         self.psl_log.setReadOnly(True)
-        self.psl_log.setMinimumHeight(180)
-        layout.addWidget(self.wrap_group("PSL 요약", self.psl_summary))
-        layout.addWidget(self.wrap_group("PSL 로그", self.psl_log))
+        self.psl_log.setMinimumHeight(240)
+
+        bottom_grid = QGridLayout()
+        bottom_grid.setContentsMargins(0, 0, 0, 0)
+        bottom_grid.setSpacing(12)
+        bottom_grid.setColumnStretch(0, 5)
+        bottom_grid.setColumnStretch(1, 5)
+
+        summary_panel = QFrame()
+        summary_panel.setObjectName("Panel")
+        summary_layout = QVBoxLayout(summary_panel)
+        summary_layout.setContentsMargins(20, 20, 20, 20)
+        summary_layout.setSpacing(12)
+        summary_title = QLabel("PSL 요약")
+        summary_title.setObjectName("PanelTitle")
+        summary_layout.addWidget(summary_title)
+        summary_layout.addWidget(self.psl_summary)
+
+        log_panel = QFrame()
+        log_panel.setObjectName("Panel")
+        log_layout = QVBoxLayout(log_panel)
+        log_layout.setContentsMargins(20, 20, 20, 20)
+        log_layout.setSpacing(12)
+        log_title = QLabel("PSL 로그")
+        log_title.setObjectName("PanelTitle")
+        log_layout.addWidget(log_title)
+        log_layout.addWidget(self.psl_log)
+
+        bottom_grid.addWidget(summary_panel, 0, 0)
+        bottom_grid.addWidget(log_panel, 0, 1)
+        layout.addLayout(bottom_grid)
+        layout.addStretch(1)
         return page
 
     def build_face_capture_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(18)
+
+        top_grid = QGridLayout()
+        top_grid.setContentsMargins(0, 0, 0, 0)
+        top_grid.setHorizontalSpacing(12)
+        top_grid.setVerticalSpacing(12)
+        top_grid.setColumnStretch(0, 6)
+        top_grid.setColumnStretch(1, 4)
 
         capture_panel = QFrame()
         capture_panel.setObjectName("Panel")
         capture_layout = QVBoxLayout(capture_panel)
-        capture_layout.setContentsMargins(18, 18, 18, 18)
-        capture_layout.setSpacing(12)
+        capture_layout.setContentsMargins(22, 22, 22, 22)
+        capture_layout.setSpacing(14)
 
-        title = QLabel("4. 얼굴 촬영")
-        title.setObjectName("SectionTitle")
-        desc = QLabel(
-            "실시간 미리보기를 시작하고 얼굴을 중앙에 맞춘 뒤 현재 프레임을 분석합니다. "
-            "실제 Face_AI 분석 결과 확인은 다음 페이지에서 진행됩니다."
-        )
-        desc.setObjectName("BodyText")
+        title = QLabel("STEP 4  FACE CAPTURE")
+        title.setObjectName("ProductBannerEyebrow")
+        headline = QLabel("촬영 설정과 실행 액션을\n상단 컨트롤 보드로 분리했습니다")
+        headline.setObjectName("ProductBannerTitle")
+        headline.setWordWrap(True)
+        desc = QLabel("카메라 선택과 프리뷰 실행, 현재 프레임 분석 요청을 우선 처리하고 아래에서 큰 화면으로 결과를 확인합니다.")
+        desc.setObjectName("PanelText")
         desc.setWordWrap(True)
         capture_layout.addWidget(title)
+        capture_layout.addWidget(headline)
         capture_layout.addWidget(desc)
 
         control_group = QGroupBox("얼굴 촬영 설정")
@@ -1227,6 +2180,7 @@ class HealthRumWindow(QMainWindow):
 
         self.face_camera_combo = QComboBox()
         self.face_camera_refresh = QPushButton("카메라 새로고침")
+        self.face_camera_refresh.setObjectName("GhostButton")
         self.face_camera_refresh.clicked.connect(self.refresh_face_cameras)
         face_cam_row = QWidget()
         face_cam_layout = QHBoxLayout(face_cam_row)
@@ -1238,10 +2192,13 @@ class HealthRumWindow(QMainWindow):
         face_button_grid = QGridLayout()
         face_button_grid.setSpacing(10)
         self.face_preview_button = QPushButton("미리보기 시작")
+        self.face_preview_button.setObjectName("GhostButton")
         self.face_preview_button.clicked.connect(self.restart_face_preview)
         self.face_analyze_button = QPushButton("현재 프레임 분석")
+        self.face_analyze_button.setObjectName("PrimaryButton")
         self.face_analyze_button.clicked.connect(self.start_face_analysis)
         self.face_to_review_button = QPushButton("얼굴 분석 확인으로 이동")
+        self.face_to_review_button.setObjectName("GhostButton")
         self.face_to_review_button.setEnabled(False)
         self.face_to_review_button.clicked.connect(lambda: self.go_to_step(4))
         face_button_grid.addWidget(self.face_preview_button, 0, 0)
@@ -1251,42 +2208,133 @@ class HealthRumWindow(QMainWindow):
         control_form.addRow("카메라", face_cam_row)
         control_form.addRow("동작", face_button_grid)
         capture_layout.addWidget(control_group)
+        top_grid.addWidget(capture_panel, 0, 0)
 
+        status_panel = QFrame()
+        status_panel.setObjectName("Panel")
+        status_layout = QVBoxLayout(status_panel)
+        status_layout.setContentsMargins(20, 20, 20, 20)
+        status_layout.setSpacing(12)
+
+        status_title = QLabel("촬영 가이드")
+        status_title.setObjectName("PanelTitle")
         self.face_capture_status_label = QLabel("실시간 얼굴 미리보기를 시작하기 전입니다.")
         self.face_capture_status_label.setObjectName("StatusText")
         self.face_capture_status_label.setWordWrap(True)
-        capture_layout.addWidget(self.face_capture_status_label)
+        status_layout.addWidget(status_title)
+        status_layout.addWidget(self.face_capture_status_label)
+        status_layout.addWidget(
+            self.build_utility_card(
+                "촬영 가이드",
+                [
+                    "얼굴이 프레임 중앙에 오도록 맞추고 턱선까지 충분히 보이게 유지합니다.",
+                    "너무 강한 역광보다 정면 조명이나 고른 실내광이 유리합니다.",
+                    "표정 변화와 고개 움직임을 줄이면 Face_AI 분석 품질이 좋아집니다.",
+                ],
+                "#9a6b2f",
+            )
+        )
+        status_layout.addWidget(
+            self.build_utility_card(
+                "분석 연결",
+                [
+                    "현재 프레임 분석을 누르면 결과 확인 단계로 이어집니다.",
+                    "얼굴 감지가 불안정하면 조명과 거리부터 먼저 조정하세요.",
+                ],
+                "#0f766e",
+            )
+        )
+        status_layout.addStretch(1)
+        top_grid.addWidget(status_panel, 0, 1)
+        layout.addLayout(top_grid)
 
+        preview_panel = QFrame()
+        preview_panel.setObjectName("Panel")
+        preview_layout = QVBoxLayout(preview_panel)
+        preview_layout.setContentsMargins(20, 20, 20, 20)
+        preview_layout.setSpacing(12)
+
+        preview_title = QLabel("실시간 프리뷰")
+        preview_title.setObjectName("PanelTitle")
+        preview_desc = QLabel("카메라 입력을 큰 화면으로 확인하면서 얼굴 위치와 구도를 맞춥니다.")
+        preview_desc.setObjectName("PanelText")
+        preview_desc.setWordWrap(True)
         self.face_preview_label = AspectRatioLabel("여기에 실시간 얼굴 미리보기가 표시됩니다.")
-        self.face_preview_label.setMinimumHeight(500)
-        capture_layout.addWidget(self.face_preview_label)
-        layout.addWidget(capture_panel)
+        self.face_preview_label.setMinimumHeight(560)
+        preview_layout.addWidget(preview_title)
+        preview_layout.addWidget(preview_desc)
+        preview_layout.addWidget(self.face_preview_label, 1)
+        layout.addWidget(preview_panel)
 
         self.face_log = QPlainTextEdit()
         self.face_log.setReadOnly(True)
         self.face_log.setMinimumHeight(220)
-        layout.addWidget(self.wrap_group("얼굴 촬영 로그", self.face_log))
+
+        log_panel = QFrame()
+        log_panel.setObjectName("Panel")
+        log_layout = QVBoxLayout(log_panel)
+        log_layout.setContentsMargins(20, 20, 20, 20)
+        log_layout.setSpacing(12)
+        log_title = QLabel("얼굴 촬영 로그")
+        log_title.setObjectName("PanelTitle")
+        log_layout.addWidget(log_title)
+        log_layout.addWidget(self.face_log)
+        layout.addWidget(log_panel)
+        layout.addStretch(1)
         return page
 
     def build_face_review_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(18)
+
+        header_grid = QGridLayout()
+        header_grid.setContentsMargins(0, 0, 0, 0)
+        header_grid.setHorizontalSpacing(12)
+        header_grid.setVerticalSpacing(12)
+        header_grid.setColumnStretch(0, 7)
+        header_grid.setColumnStretch(1, 5)
+
+        snapshot_panel = QFrame()
+        snapshot_panel.setObjectName("Panel")
+        snapshot_layout = QVBoxLayout(snapshot_panel)
+        snapshot_layout.setContentsMargins(20, 20, 20, 20)
+        snapshot_layout.setSpacing(12)
+
+        snapshot_title = QLabel("STEP 5  FACE AI REVIEW")
+        snapshot_title.setObjectName("ProductBannerEyebrow")
+        snapshot_headline = QLabel("분석 결과는 큰 스냅샷과\n지표 보드로 분리해 검토합니다")
+        snapshot_headline.setObjectName("ProductBannerTitle")
+        snapshot_headline.setWordWrap(True)
+        snapshot_desc = QLabel("주석이 포함된 스냅샷과 얼굴 감지 상태를 먼저 확인하고, 우측에서 지표와 이동 액션을 처리합니다.")
+        snapshot_desc.setObjectName("PanelText")
+        snapshot_desc.setWordWrap(True)
+
+        self.face_review_status_label = QLabel("아직 Face_AI 결과가 없습니다.")
+        self.face_review_status_label.setObjectName("StatusText")
+        self.face_review_status_label.setWordWrap(True)
+
+        self.face_snapshot_label = AspectRatioLabel("여기에 Face_AI 분석 스냅샷이 표시됩니다.")
+        self.face_snapshot_label.setMinimumHeight(520)
+
+        snapshot_layout.addWidget(snapshot_title)
+        snapshot_layout.addWidget(snapshot_headline)
+        snapshot_layout.addWidget(snapshot_desc)
+        snapshot_layout.addWidget(self.face_review_status_label)
+        snapshot_layout.addWidget(self.face_snapshot_label, 1)
+        header_grid.addWidget(snapshot_panel, 0, 0)
 
         review_panel = QFrame()
         review_panel.setObjectName("Panel")
         review_layout = QVBoxLayout(review_panel)
-        review_layout.setContentsMargins(18, 18, 18, 18)
-        review_layout.setSpacing(12)
+        review_layout.setContentsMargins(20, 20, 20, 20)
+        review_layout.setSpacing(14)
 
-        title = QLabel("5. Face_AI 분석 확인")
-        title.setObjectName("SectionTitle")
-        desc = QLabel(
-            "여기에서 주석이 포함된 스냅샷과 Face_AI 피부 지표를 확인합니다. "
-            "모든 통합 결과는 최종 결과 페이지에서만 한 번에 표시됩니다."
-        )
-        desc.setObjectName("BodyText")
+        title = QLabel("지표와 액션")
+        title.setObjectName("PanelTitle")
+        desc = QLabel("핵심 피부 지표를 확인한 뒤 재촬영하거나 최종 결과 페이지로 이동할 수 있습니다.")
+        desc.setObjectName("PanelText")
         desc.setWordWrap(True)
         review_layout.addWidget(title)
         review_layout.addWidget(desc)
@@ -1294,75 +2342,99 @@ class HealthRumWindow(QMainWindow):
         review_button_grid = QGridLayout()
         review_button_grid.setSpacing(10)
         self.face_retake_button = QPushButton("얼굴 다시 촬영")
+        self.face_retake_button.setObjectName("GhostButton")
         self.face_retake_button.clicked.connect(lambda: self.go_to_step(3))
         self.face_to_final_button = QPushButton("최종 결과 열기")
+        self.face_to_final_button.setObjectName("PrimaryButton")
         self.face_to_final_button.setEnabled(False)
         self.face_to_final_button.clicked.connect(lambda: self.go_to_step(5))
         review_button_grid.addWidget(self.face_retake_button, 0, 0)
         review_button_grid.addWidget(self.face_to_final_button, 0, 1)
         review_layout.addLayout(review_button_grid)
 
-        self.face_review_status_label = QLabel("아직 Face_AI 결과가 없습니다.")
-        self.face_review_status_label.setObjectName("StatusText")
-        self.face_review_status_label.setWordWrap(True)
-        review_layout.addWidget(self.face_review_status_label)
-
-        self.face_snapshot_label = AspectRatioLabel("여기에 Face_AI 분석 스냅샷이 표시됩니다.")
-        self.face_snapshot_label.setMinimumHeight(480)
-        review_layout.addWidget(self.face_snapshot_label)
-        layout.addWidget(review_panel)
-
-        face_card_group = QGroupBox("Face_AI 지표")
-        face_card_layout = QGridLayout(face_card_group)
+        face_cards_panel = QFrame()
+        face_cards_panel.setObjectName("PanelInner")
+        face_card_layout = QGridLayout(face_cards_panel)
+        face_card_layout.setContentsMargins(0, 0, 0, 0)
+        face_card_layout.setSpacing(10)
         face_card_meta = {
-            "overall": ("종합 점수", "#49e1b6"),
-            "wrinkle": ("주름", "#ff7d5b"),
-            "pigmentation": ("색소", "#f7c65a"),
-            "pore": ("모공", "#49b6ff"),
-            "dryness": ("건조", "#ff9db3"),
-            "sagging": ("처짐", "#a2f56f"),
+            "overall": ("종합 점수", "#1d4ed8"),
+            "wrinkle": ("주름", "#9a6b2f"),
+            "pigmentation": ("색소", "#a16207"),
+            "pore": ("모공", "#0f766e"),
+            "dryness": ("건조", "#5b6fb3"),
+            "sagging": ("처짐", "#2f7f73"),
         }
         for idx, (key, meta) in enumerate(face_card_meta.items()):
             card = DashboardCard(meta[0], meta[1])
             self.face_review_cards[key] = card
             face_card_layout.addWidget(card, idx // 2, idx % 2)
-        layout.addWidget(face_card_group)
+        review_layout.addWidget(face_cards_panel)
+        review_layout.addWidget(
+            self.build_utility_card(
+                "판독 메모",
+                [
+                    "종합 점수는 전체 피부 상태를 빠르게 보기 위한 요약 지표입니다.",
+                    "주름, 색소, 모공, 건조, 처짐 지표는 최종 리포트의 피부 섹션으로 이어집니다.",
+                ],
+                "#9a6b2f",
+            )
+        )
+        review_layout.addStretch(1)
+        header_grid.addWidget(review_panel, 0, 1)
+        layout.addLayout(header_grid)
 
         self.face_summary = QPlainTextEdit()
         self.face_summary.setReadOnly(True)
         self.face_summary.setMinimumHeight(240)
-        layout.addWidget(self.wrap_group("Face_AI 요약", self.face_summary))
+
+        summary_panel = QFrame()
+        summary_panel.setObjectName("Panel")
+        summary_layout = QVBoxLayout(summary_panel)
+        summary_layout.setContentsMargins(20, 20, 20, 20)
+        summary_layout.setSpacing(12)
+        summary_title = QLabel("Face_AI 요약")
+        summary_title.setObjectName("PanelTitle")
+        summary_layout.addWidget(summary_title)
+        summary_layout.addWidget(self.face_summary)
+        layout.addWidget(summary_panel)
+        layout.addStretch(1)
         return page
 
     def build_final_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(14)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(18)
 
         final_panel = QFrame()
         final_panel.setObjectName("Panel")
         final_layout = QVBoxLayout(final_panel)
-        final_layout.setContentsMargins(18, 18, 18, 18)
+        final_layout.setContentsMargins(20, 20, 20, 20)
         final_layout.setSpacing(14)
 
-        title = QLabel("6. 최종 통합 결과")
-        title.setObjectName("SectionTitle")
-        desc = QLabel(
-            "샘플 리포트 형태로 심혈관·피부·5장6부·체질 결과를 한 장의 보고서 흐름으로 정리했습니다."
-        )
-        desc.setObjectName("BodyText")
+        title = QLabel("STEP 6  FINAL REPORT")
+        title.setObjectName("ProductBannerEyebrow")
+        headline = QLabel("최종 결과는 상단 인사이트와\n하단 리포트 문서로 나눠 구성했습니다")
+        headline.setObjectName("ProductBannerTitle")
+        headline.setWordWrap(True)
+        desc = QLabel("저장, 세션 이동, 상태 확인은 상단 인사이트 구역에서 처리하고 상세 해설은 아래 보고서 영역으로 분리했습니다.")
+        desc.setObjectName("PanelText")
         desc.setWordWrap(True)
         final_layout.addWidget(title)
+        final_layout.addWidget(headline)
         final_layout.addWidget(desc)
 
         action_grid = QGridLayout()
         action_grid.setSpacing(10)
         self.summary_export_button = QPushButton("결과 저장")
+        self.summary_export_button.setObjectName("PrimaryButton")
         self.summary_export_button.clicked.connect(self.export_combined_summary)
         self.summary_folder_button = QPushButton("세션 폴더 열기")
+        self.summary_folder_button.setObjectName("GhostButton")
         self.summary_folder_button.clicked.connect(self.open_session_dir)
         self.summary_restart_button = QPushButton("세션 다시 시작")
+        self.summary_restart_button.setObjectName("GhostButton")
         self.summary_restart_button.clicked.connect(self.start_new_session)
         action_grid.addWidget(self.summary_export_button, 0, 0)
         action_grid.addWidget(self.summary_folder_button, 0, 1)
@@ -1377,33 +2449,99 @@ class HealthRumWindow(QMainWindow):
 
         self.final_report_sections = []
 
+        final_cards_panel = QFrame()
+        final_cards_panel.setObjectName("Panel")
+        final_cards_layout = QGridLayout(final_cards_panel)
+        final_cards_layout.setContentsMargins(20, 20, 20, 20)
+        final_cards_layout.setSpacing(10)
+        final_card_meta = {
+            "survey": ("설문 상태", "#1d4ed8"),
+            "psl": ("PSL 상태", "#0f766e"),
+            "face": ("Face_AI 상태", "#9a6b2f"),
+        }
+        for idx, (key, meta) in enumerate(final_card_meta.items()):
+            card = DashboardCard(meta[0], meta[1])
+            self.final_cards[key] = card
+            final_cards_layout.addWidget(card, 0, idx)
+        layout.addWidget(final_cards_panel)
+
+        insight_grid = QGridLayout()
+        insight_grid.setContentsMargins(0, 0, 0, 0)
+        insight_grid.setSpacing(12)
+        insight_grid.setColumnStretch(0, 7)
+        insight_grid.setColumnStretch(1, 5)
+
+        recommendation_panel = QFrame()
+        recommendation_panel.setObjectName("Panel")
+        recommendation_layout = QVBoxLayout(recommendation_panel)
+        recommendation_layout.setContentsMargins(20, 20, 20, 20)
+        recommendation_layout.setSpacing(12)
+        recommendation_title = QLabel("추가 판정 해설")
+        recommendation_title.setObjectName("PanelTitle")
+        recommendation_layout.addWidget(recommendation_title)
+
+        self.recommendation_text = QPlainTextEdit()
+        self.recommendation_text.setReadOnly(True)
+        self.recommendation_text.setMinimumHeight(240)
+        recommendation_layout.addWidget(self.recommendation_text)
+        insight_grid.addWidget(recommendation_panel, 0, 0)
+
+        summary_panel = QFrame()
+        summary_panel.setObjectName("Panel")
+        summary_layout = QVBoxLayout(summary_panel)
+        summary_layout.setContentsMargins(20, 20, 20, 20)
+        summary_layout.setSpacing(12)
+        summary_title = QLabel("통합 세션 요약")
+        summary_title.setObjectName("PanelTitle")
+        summary_layout.addWidget(summary_title)
+        self.final_summary_text = QPlainTextEdit()
+        self.final_summary_text.setReadOnly(True)
+        self.final_summary_text.setMinimumHeight(240)
+        summary_layout.addWidget(self.final_summary_text)
+        insight_grid.addWidget(summary_panel, 0, 1)
+
+        paths_panel = QFrame()
+        paths_panel.setObjectName("Panel")
+        paths_layout = QVBoxLayout(paths_panel)
+        paths_layout.setContentsMargins(20, 20, 20, 20)
+        paths_layout.setSpacing(12)
+        paths_title = QLabel("저장된 파일")
+        paths_title.setObjectName("PanelTitle")
+        paths_layout.addWidget(paths_title)
+        self.final_paths_text = QPlainTextEdit()
+        self.final_paths_text.setReadOnly(True)
+        self.final_paths_text.setMinimumHeight(160)
+        paths_layout.addWidget(self.final_paths_text)
+        insight_grid.addWidget(paths_panel, 1, 0, 1, 2)
+        layout.addLayout(insight_grid)
+
         self.final_biosignal_section = ReportSection(
             "1.심혈관·자율신경 영역 측정 및 AI 분석 리포트",
-            "#49d9ff",
+            "#1d4ed8",
             "PSL_Test 기반 측정값, 정상 범위, AI 해석, 고객 설명 자료를 한 번에 정리합니다.",
         )
-        self.final_biosignal_table = ReportTableWidget("#49d9ff")
+        self.final_biosignal_table = ReportTableWidget("#1d4ed8")
         self.final_biosignal_section.add_content(self.final_biosignal_table)
         self.final_report_sections.append(self.final_biosignal_section)
         layout.addWidget(self.final_biosignal_section)
 
         self.final_skin_section = ReportSection(
             "2. 피부·미용 영역 측정 및 AI 분석 리포트",
-            "#f7b557",
+            "#9a6b2f",
             "Face_AI 지표를 피부 상태 평가와 관리 방향 중심으로 보기 쉽게 정리합니다.",
         )
-        self.final_skin_table = ReportTableWidget("#f7b557")
+        self.final_skin_table = ReportTableWidget("#9a6b2f")
         self.final_skin_section.add_content(self.final_skin_table)
         self.final_report_sections.append(self.final_skin_section)
         layout.addWidget(self.final_skin_section)
 
         self.final_organ_section = ReportSection(
             "3. 5장 6부 건강 상태 추정 AI 분석 리포트",
-            "#7ef0b5",
+            "#0f766e",
             "(질병 진단이 아니라 경향성 / 밸런스 점수 상태)",
         )
-        self.final_zang_table = ReportTableWidget("#7ef0b5")
-        self.final_fu_table = ReportTableWidget("#9ddfff")
+        self.final_zang_table = ReportTableWidget("#0f766e")
+        self.final_fu_table = ReportTableWidget("#2f7f73")
         self.final_organ_section.add_content(self.final_zang_table)
         self.final_organ_section.add_content(self.final_fu_table)
         self.final_report_sections.append(self.final_organ_section)
@@ -1411,32 +2549,20 @@ class HealthRumWindow(QMainWindow):
 
         self.final_constitution_section = ReportSection(
             "4. 체질 AI 분석 리포트",
-            "#ff8f7a",
+            "#a16207",
             "체질 설문, PSL_Test, Face_AI 결과를 결합해 8개 타입 중 최종 판정을 표시합니다.",
         )
-        self.final_constitution_table = ReportTableWidget("#ff8f7a")
+        self.final_constitution_table = ReportTableWidget("#a16207")
         self.final_constitution_section.add_content(self.final_constitution_table)
         self.final_report_sections.append(self.final_constitution_section)
         layout.addWidget(self.final_constitution_section)
-
-        self.recommendation_text = QPlainTextEdit()
-        self.recommendation_text.setReadOnly(True)
-        self.recommendation_text.setMinimumHeight(240)
-        layout.addWidget(self.wrap_group("추가 판정 해설", self.recommendation_text))
-
-        self.final_summary_text = QPlainTextEdit()
-        self.final_summary_text.setReadOnly(True)
-        self.final_summary_text.setMinimumHeight(260)
-        self.final_paths_text = QPlainTextEdit()
-        self.final_paths_text.setReadOnly(True)
-        self.final_paths_text.setMinimumHeight(160)
-        layout.addWidget(self.wrap_group("통합 세션 요약", self.final_summary_text))
-        layout.addWidget(self.wrap_group("저장된 파일", self.final_paths_text))
         self.populate_final_report_placeholders()
+        layout.addStretch(1)
         return page
 
     def wrap_group(self, title: str, widget: QWidget) -> QGroupBox:
         group = QGroupBox(title)
+        group.setObjectName("SurfaceGroup")
         group_layout = QVBoxLayout(group)
         group_layout.setContentsMargins(12, 12, 12, 12)
         group_layout.addWidget(widget)
@@ -1920,134 +3046,325 @@ class HealthRumWindow(QMainWindow):
         self.setStyleSheet(
             """
             QMainWindow, QWidget {
-                color: #f3fbff;
+                color: #1f2937;
+                background: transparent;
             }
-            QFrame#Hero {
+            QFrame#AppShell {
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 rgba(18, 45, 70, 240),
-                    stop: 0.55 rgba(14, 87, 118, 232),
-                    stop: 1 rgba(247, 162, 59, 218)
+                    stop: 0 rgba(253, 249, 241, 0.96),
+                    stop: 1 rgba(243, 247, 246, 0.96)
                 );
-                border: 1px solid rgba(211, 244, 255, 0.2);
+                border: 1px solid rgba(223, 227, 221, 0.98);
+                border-radius: 30px;
+            }
+            QFrame#NavRail {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 0, y2: 1,
+                    stop: 0 rgba(247, 243, 235, 0.98),
+                    stop: 1 rgba(240, 244, 240, 0.98)
+                );
+                border: 1px solid rgba(223, 227, 221, 1);
+                border-radius: 24px;
+            }
+            QFrame#RailBrand {
+                background: transparent;
+                border: 0;
+            }
+            QFrame#WorkspaceShell {
+                background: rgba(255, 255, 255, 0.48);
+                border: 1px solid rgba(255, 255, 255, 0.76);
+                border-radius: 30px;
+            }
+            QLabel#ShellEyebrow,
+            QLabel#ProductBannerEyebrow,
+            QLabel#ShellMetaTitle,
+            QLabel#ProductBannerAsideTitle {
+                color: #0f766e;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 1px;
+            }
+            QLabel#ShellTitle {
+                color: #17212f;
+                font-family: Bahnschrift;
+                font-size: 27px;
+                font-weight: 700;
+            }
+            QLabel#ShellSubtitle {
+                color: #667085;
+                font-size: 12px;
+            }
+            QFrame#ShellMetaCard,
+            QFrame#StepRail,
+            QFrame#ProductBanner,
+            QFrame#ProductBannerAside,
+            QFrame#MetricTile,
+            QFrame#UtilityCard,
+            QFrame#Panel,
+            QFrame#QuestionCard,
+            QFrame#DashboardCard,
+            QGroupBox {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(252, 250, 245, 0.99),
+                    stop: 1 rgba(247, 248, 244, 0.99)
+                );
+                border: 1px solid rgba(225, 228, 220, 1);
+                border-radius: 26px;
+            }
+            QFrame#ProductBannerAside {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(245, 247, 244, 0.99),
+                    stop: 1 rgba(240, 244, 241, 0.99)
+                );
+            }
+            QFrame#QuestionCard {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(250, 247, 239, 0.99),
+                    stop: 1 rgba(247, 246, 241, 0.99)
+                );
+            }
+            QFrame#EditorialHero {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(252, 246, 236, 1),
+                    stop: 0.65 rgba(244, 247, 241, 1),
+                    stop: 1 rgba(239, 244, 244, 1)
+                );
+                border: 1px solid rgba(223, 227, 221, 1);
                 border-radius: 28px;
             }
-            QLabel#HeroTitle {
-                color: #f8fcff;
-                font-family: Bahnschrift;
-                font-size: 34px;
-                font-weight: 700;
-                letter-spacing: 2px;
+            QFrame#MainControlCard {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(243, 246, 241, 1),
+                    stop: 1 rgba(239, 243, 240, 1)
+                );
+                border: 1px solid rgba(223, 227, 221, 1);
+                border-radius: 28px;
             }
-            QLabel#HeroSubtitle {
-                color: rgba(248, 252, 255, 0.92);
-                font-size: 13px;
-                line-height: 1.5;
+            QFrame#ShellMetaCard {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(249, 246, 239, 1),
+                    stop: 1 rgba(245, 247, 243, 1)
+                );
+                border-radius: 20px;
             }
-            QFrame#Panel, QGroupBox, QFrame#DashboardCard, QFrame#StepBadge {
-                background: rgba(8, 22, 34, 226);
-                border: 1px solid rgba(169, 227, 255, 0.14);
-                border-radius: 24px;
+            QFrame#ProductBanner {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(252, 248, 240, 1),
+                    stop: 0.55 rgba(247, 248, 243, 1),
+                    stop: 1 rgba(241, 246, 244, 1)
+                );
+            }
+            QFrame#MetricTile {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(251, 248, 243, 1),
+                    stop: 1 rgba(248, 248, 244, 1)
+                );
+            }
+            QFrame#UtilityCard {
+                background: qlineargradient(
+                    x1: 0, y1: 0, x2: 1, y2: 1,
+                    stop: 0 rgba(248, 247, 242, 1),
+                    stop: 1 rgba(244, 246, 242, 1)
+                );
+            }
+            QFrame#StepRail {
+                background: rgba(245, 243, 236, 0.98);
+                border-radius: 22px;
+            }
+            QFrame#PanelInner {
+                background: transparent;
+                border: 0;
+            }
+            QFrame#BannerDivider {
+                background: rgba(217, 223, 218, 1);
+                border-radius: 1px;
+            }
+            QFrame#TimelineRow {
+                background: transparent;
+                border: 0;
             }
             QFrame#ReportSection {
                 background: qlineargradient(
                     x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 rgba(8, 24, 38, 0.98),
-                    stop: 1 rgba(10, 31, 48, 0.98)
+                    stop: 0 rgba(253, 250, 245, 1),
+                    stop: 1 rgba(247, 248, 244, 1)
                 );
-                border: 1px solid rgba(169, 227, 255, 0.16);
+                border: 1px solid rgba(225, 228, 220, 1);
                 border-radius: 26px;
             }
             QFrame#ReportTableFrame {
-                background: rgba(4, 15, 24, 0.94);
-                border: 1px solid rgba(126, 205, 233, 0.18);
-                border-radius: 18px;
+                background: rgba(248, 248, 244, 1);
+                border: 1px solid rgba(228, 232, 225, 1);
+                border-radius: 20px;
             }
             QGroupBox {
                 margin-top: 14px;
-                padding-top: 16px;
+                padding-top: 18px;
                 font-size: 12px;
                 font-weight: 700;
-                color: #9ddfff;
+                color: #425466;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 16px;
+                top: 2px;
+                padding: 0 6px;
+            }
+            QLabel#ProductBannerTitle {
+                color: #17212f;
+                font-family: Bahnschrift;
+                font-size: 30px;
+                font-weight: 700;
+            }
+            QLabel#ProductBannerText,
+            QLabel#ProductBannerAsideText,
+            QLabel#ShellMetaText,
+            QLabel#PanelText,
+            QLabel#BodyText,
+            QLabel#InfoText,
+            QLabel#StatusText,
+            QLabel#UtilityCardText,
+            QLabel#MetricTileText {
+                color: #667085;
+                font-size: 12px;
+            }
+            QLabel#ProductBannerAsideValue {
+                color: #17212f;
+                font-family: Bahnschrift;
+                font-size: 24px;
+                font-weight: 700;
+            }
+            QLabel#ShellMetaValue {
+                color: #1d4ed8;
+                font-family: Bahnschrift;
+                font-size: 19px;
+                font-weight: 700;
+            }
+            QLabel#ProductBadge {
+                background: rgba(242, 244, 239, 1);
+                border: 1px solid rgba(222, 226, 218, 1);
+                border-radius: 15px;
+                padding: 8px 13px;
+                color: #475467;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            QLabel#TimelineDot {
+                color: #0f766e;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel#PanelTitle,
+            QLabel#SectionTitle,
+            QLabel#ReportSectionTitle,
+            QLabel#UtilityCardTitle,
+            QLabel#MetricTileTitle {
+                color: #17212f;
+                font-size: 18px;
+                font-weight: 700;
             }
             QLabel#SectionTitle {
                 font-size: 24px;
-                font-weight: 700;
-                color: #f6fbff;
             }
             QLabel#ReportSectionTitle {
                 font-size: 28px;
-                font-weight: 700;
-                color: #f8fcff;
             }
             QLabel#ReportSectionSubtitle {
                 font-size: 12px;
-                color: #bed9e8;
+                color: #6b7280;
             }
             QLabel#ReportCaption {
                 font-size: 11px;
-                color: #9ddfff;
+                color: #6b7280;
                 padding-left: 4px;
             }
-            QLabel#BodyText, QLabel#InfoText, QLabel#StatusText {
-                font-size: 12px;
-                color: #c7e6f4;
-            }
             QLabel#InfoBlock {
-                background: rgba(13, 49, 69, 0.84);
-                border: 1px solid rgba(247, 162, 59, 0.28);
+                background: rgba(244, 247, 244, 1);
+                border: 1px solid rgba(224, 229, 221, 1);
                 border-radius: 18px;
                 padding: 16px;
-                color: #ffe8c7;
+                color: #475467;
+            }
+            QLabel#MetricTileValue {
+                font-family: Bahnschrift;
+                font-size: 24px;
+                font-weight: 700;
             }
             QPushButton {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 rgba(24, 145, 196, 220),
-                    stop: 1 rgba(70, 218, 198, 220)
-                );
-                color: #031117;
-                border: 0;
+                background: rgba(247, 247, 244, 1);
+                color: #243142;
+                border: 1px solid rgba(214, 220, 215, 1);
                 border-radius: 18px;
                 padding: 14px 18px;
-                min-height: 58px;
+                min-height: 54px;
                 font-size: 13px;
                 font-weight: 700;
             }
+            QPushButton#PrimaryButton {
+                background: #0f766e;
+                color: #ffffff;
+                border: 0;
+                min-height: 60px;
+                font-size: 15px;
+            }
+            QPushButton#GhostButton {
+                background: rgba(255, 255, 255, 0.45);
+                color: #314155;
+                border: 1px solid rgba(208, 215, 210, 1);
+            }
             QPushButton:hover {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 rgba(58, 193, 243, 230),
-                    stop: 1 rgba(102, 237, 214, 230)
-                );
+                background: rgba(241, 243, 239, 1);
             }
             QPushButton:pressed {
-                background: rgba(77, 224, 226, 180);
+                background: rgba(232, 236, 232, 1);
+            }
+            QPushButton#PrimaryButton:hover {
+                background: #0b5f59;
+            }
+            QPushButton#PrimaryButton:pressed {
+                background: #094b46;
+            }
+            QPushButton#GhostButton:hover {
+                background: rgba(250, 250, 248, 0.85);
             }
             QPushButton:disabled {
-                background: rgba(102, 134, 148, 0.45);
-                color: rgba(244, 250, 255, 0.6);
+                background: rgba(148, 163, 184, 0.55);
+                color: rgba(255, 255, 255, 0.82);
+                border: 0;
             }
             QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox, QPlainTextEdit {
-                background: rgba(3, 16, 26, 0.92);
-                border: 1px solid rgba(157, 223, 255, 0.14);
+                background: rgba(255, 255, 255, 0.95);
+                border: 1px solid rgba(219, 224, 218, 1);
                 border-radius: 16px;
                 padding: 10px 12px;
-                color: #f3fbff;
-                selection-background-color: #18c3ff;
+                color: #1f2937;
+                selection-background-color: #d9f3ef;
+            }
+            QComboBox::drop-down {
+                border: 0;
+                width: 28px;
             }
             QCheckBox {
                 spacing: 10px;
                 font-size: 12px;
-                color: #e8f7ff;
-                padding: 7px 8px;
+                color: #344054;
+                padding: 8px 10px;
                 border-radius: 14px;
-                background: rgba(12, 35, 49, 0.78);
-                border: 1px solid rgba(90, 177, 211, 0.18);
+                background: rgba(250, 249, 245, 1);
+                border: 1px solid rgba(225, 228, 220, 1);
             }
             QCheckBox:hover {
-                background: rgba(17, 50, 70, 0.88);
-                border-color: rgba(144, 229, 255, 0.3);
+                background: rgba(246, 246, 241, 1);
+                border-color: rgba(196, 204, 198, 1);
             }
             QCheckBox::indicator {
                 width: 20px;
@@ -2055,90 +3372,97 @@ class HealthRumWindow(QMainWindow):
             }
             QCheckBox::indicator:unchecked {
                 border-radius: 6px;
-                border: 1px solid rgba(157, 223, 255, 0.34);
-                background: rgba(2, 12, 21, 0.96);
+                border: 1px solid rgba(167, 177, 171, 1);
+                background: rgba(255, 255, 255, 1);
             }
             QCheckBox::indicator:checked {
                 border-radius: 6px;
-                border: 1px solid rgba(117, 245, 219, 0.55);
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 rgba(24, 195, 255, 0.95),
-                    stop: 1 rgba(73, 225, 182, 0.95)
-                );
+                border: 1px solid rgba(15, 118, 110, 1);
+                background: #0f766e;
             }
             QPlainTextEdit {
                 padding: 14px;
                 font-size: 12px;
-                line-height: 1.4;
             }
             QLabel#CardTitle {
                 font-size: 11px;
                 font-weight: 700;
-                text-transform: uppercase;
+                color: #667085;
             }
             QLabel#CardValue {
                 font-size: 25px;
                 font-weight: 700;
-                color: #f8fcff;
+                color: #17212f;
             }
             QLabel#CardDetail {
                 font-size: 11px;
-                color: #a8cbde;
+                color: #6b7280;
             }
             QFrame#DashboardCard {
-                border: 1px solid rgba(155, 231, 255, 0.16);
+                border: 1px solid rgba(226, 229, 221, 1);
             }
             QFrame#StepBadge[state="pending"] {
-                background: rgba(8, 22, 34, 0.82);
+                background: rgba(252, 249, 244, 1);
+                border-color: rgba(225, 228, 220, 1);
             }
             QFrame#StepBadge[state="current"] {
-                background: rgba(19, 126, 165, 0.92);
-                border-color: rgba(151, 240, 255, 0.42);
+                background: #0f766e;
+                border-color: rgba(15, 118, 110, 1);
             }
             QFrame#StepBadge[state="complete"] {
-                background: rgba(40, 118, 104, 0.88);
-                border-color: rgba(147, 255, 216, 0.36);
+                background: rgba(234, 245, 241, 1);
+                border-color: rgba(187, 221, 212, 1);
             }
             QLabel#StepNumber {
-                min-width: 30px;
-                max-width: 30px;
-                min-height: 30px;
-                max-height: 30px;
-                border-radius: 15px;
-                background: rgba(244, 250, 255, 0.12);
-                color: #f6fbff;
-                font-size: 12px;
+                min-width: 26px;
+                max-width: 26px;
+                min-height: 26px;
+                max-height: 26px;
+                border-radius: 13px;
+                background: rgba(231, 232, 227, 1);
+                color: #344054;
+                font-size: 11px;
                 font-weight: 700;
                 qproperty-alignment: AlignCenter;
             }
             QLabel#StepTitle {
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 700;
-                color: #e4f6ff;
+                color: #475467;
+            }
+            QFrame#StepBadge[state="current"] QLabel#StepNumber {
+                background: rgba(255, 255, 255, 0.2);
+                color: #ffffff;
+            }
+            QFrame#StepBadge[state="current"] QLabel#StepTitle {
+                color: #ffffff;
             }
             QLabel#PreviewFrame {
-                background: rgba(2, 9, 15, 0.94);
-                border: 1px solid rgba(24, 195, 255, 0.18);
+                background: rgba(251, 250, 247, 1);
+                border: 1px solid rgba(226, 229, 221, 1);
                 border-radius: 26px;
-                color: rgba(234, 248, 255, 0.86);
+                color: #6b7280;
                 font-size: 14px;
-                padding: 12px;
+                padding: 16px;
             }
             QScrollArea {
                 background: transparent;
                 border: 0;
             }
             QScrollBar:vertical {
-                background: rgba(255, 255, 255, 0.04);
+                background: rgba(225, 228, 220, 0.65);
                 width: 10px;
                 margin: 8px 0 8px 0;
                 border-radius: 5px;
             }
             QScrollBar::handle:vertical {
-                background: rgba(24, 195, 255, 0.34);
+                background: rgba(177, 185, 178, 0.95);
                 border-radius: 5px;
                 min-height: 28px;
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0;
             }
             """
         )
@@ -2181,7 +3505,13 @@ class HealthRumWindow(QMainWindow):
 
         self.reset_session_state()
         self.session_dir = new_health_rum_session_dir()
-        self.main_session_label.setText(f"현재 세션: {self.session_dir.name}")
+        self.main_session_label.setText(f"세션 생성 완료\n{self.session_dir.name}")
+        if hasattr(self, "main_session_hint_label"):
+            self.main_session_hint_label.setText("설문 단계로 이동했습니다. 이후 PSL, Face_AI, 통합 리포트 결과가 이 세션 안에 자동 저장됩니다.")
+        if hasattr(self, "shell_session_value") and self.shell_session_value is not None:
+            self.shell_session_value.setText(self.session_dir.name)
+        if hasattr(self, "shell_session_text") and self.shell_session_text is not None:
+            self.shell_session_text.setText("설문 단계로 이동했습니다. 세션 저장이 활성화된 상태입니다.")
         self.go_to_step(1)
 
     def reset_session_state(self) -> None:
@@ -2196,7 +3526,13 @@ class HealthRumWindow(QMainWindow):
         self.face_paths = {}
         self._current_face_frame = None
 
-        self.main_session_label.setText("아직 생성된 세션이 없습니다.")
+        self.main_session_label.setText("세션 준비 전\n아직 생성된 세션이 없습니다.")
+        if hasattr(self, "main_session_hint_label"):
+            self.main_session_hint_label.setText("아래 시작 버튼을 누르면 새 세션 폴더가 생성되고, 바로 2단계 체질 설문으로 이동합니다.")
+        if hasattr(self, "shell_session_value") and self.shell_session_value is not None:
+            self.shell_session_value.setText("No Active Session")
+        if hasattr(self, "shell_session_text") and self.shell_session_text is not None:
+            self.shell_session_text.setText("새 세션 시작 전 상태입니다.")
         self.psl_status_label.setText("PSL_Test 측정을 기다리는 중입니다.")
         self.face_capture_status_label.setText("실시간 얼굴 미리보기를 시작하기 전입니다.")
         self.face_review_status_label.setText("아직 Face_AI 결과가 없습니다.")
@@ -2406,7 +3742,13 @@ class HealthRumWindow(QMainWindow):
 
         if self.session_dir is None:
             self.session_dir = new_health_rum_session_dir()
-            self.main_session_label.setText(f"현재 세션: {self.session_dir.name}")
+            self.main_session_label.setText(f"세션 생성 완료\n{self.session_dir.name}")
+            if hasattr(self, "main_session_hint_label"):
+                self.main_session_hint_label.setText("PSL 단계에서 세션이 자동 생성되었습니다. 이번 검사 결과는 같은 세션 폴더에 누적 저장됩니다.")
+            if hasattr(self, "shell_session_value") and self.shell_session_value is not None:
+                self.shell_session_value.setText(self.session_dir.name)
+            if hasattr(self, "shell_session_text") and self.shell_session_text is not None:
+                self.shell_session_text.setText("PSL 단계에서 세션이 자동 생성되어 결과 누적 저장이 시작되었습니다.")
 
         try:
             config = self.build_psl_config()
@@ -2663,7 +4005,8 @@ class HealthRumWindow(QMainWindow):
         self.face_snapshot_label.set_placeholder("분석 스냅샷 파일을 찾지 못했습니다.")
 
     def refresh_final_page(self) -> None:
-        if sum(self.survey_answers.values()) > 0:
+        survey_selected_count = sum(self.survey_answers.values())
+        if survey_selected_count > 0:
             self.survey_result = build_profile_recommendation(self.survey_answers, self.psl_report, self.face_result, self.survey_details)
             self.recommendation_text.setPlainText(format_profile_recommendation(self.survey_result))
         else:
@@ -2711,6 +4054,26 @@ class HealthRumWindow(QMainWindow):
             self.final_status_label.setText("피부 리포트는 준비되었고, 심혈관 리포트는 PSL_Test를 실행하면 채워집니다.")
         else:
             self.final_status_label.setText("설문, PSL_Test, Face_AI를 모두 완료하면 최종 보고서형 결과가 채워집니다.")
+
+        if "survey" in self.final_cards:
+            survey_state = "완료" if survey_selected_count > 0 else "대기"
+            survey_detail = f"선택 문항 {survey_selected_count}개" if survey_selected_count > 0 else "아직 설문 결과가 없습니다."
+            self.final_cards["survey"].update_card(survey_state, survey_detail)
+        if "psl" in self.final_cards:
+            psl_state = "완료" if self.psl_report else "대기"
+            psl_detail = "바이오신호 리포트가 준비되었습니다." if self.psl_report else "PSL_Test를 실행하면 채워집니다."
+            self.final_cards["psl"].update_card(psl_state, psl_detail)
+        if "face" in self.final_cards:
+            if self.face_result and not self.face_result.get("face_detected", True):
+                face_state = "재촬영 필요"
+                face_detail = "Face_AI가 얼굴을 감지하지 못했습니다."
+            elif self.face_result:
+                face_state = "완료"
+                face_detail = "피부 분석 리포트가 준비되었습니다."
+            else:
+                face_state = "대기"
+                face_detail = "얼굴 촬영과 분석을 실행하면 채워집니다."
+            self.final_cards["face"].update_card(face_state, face_detail)
 
         self.final_summary_text.setPlainText(self.build_integrated_summary())
 
